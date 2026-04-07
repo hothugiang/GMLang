@@ -1,0 +1,650 @@
+---
+title: ""
+author: ""
+
+format:
+  pdf:
+    documentclass: article
+    papersize: a4
+    fontsize: 12pt
+    pdf-engine: xelatex
+    geometry:
+      - top=25mm
+      - bottom=25mm
+      - left=20mm
+      - right=20mm
+    header-includes:
+        - \usepackage[vietnamese]{babel}
+        - \usepackage{amsmath, amssymb}
+        - \usepackage{graphicx}
+        - \usepackage{setspace}
+---
+
+\begin{titlepage}
+\begin{center}
+
+\textbf{\Large ĐẠI HỌC QUỐC GIA HÀ NỘI}\\ [0.5cm]
+\textbf{\Large TRƯỜNG ĐẠI HỌC CÔNG NGHỆ}\\ [1.5cm]
+
+\includegraphics[width=5.5cm]{logo.png}\\ [1.5cm]
+
+\textbf{\Large BÁO CÁO BÀI TẬP LỚN}\\ [0.5cm]
+\textbf{\Large ĐẶC TẢ NGÔN NGỮ LẬP TRÌNH}\\ [1cm]
+
+\textit{NGUYÊN LÝ NGÔN NGỮ LẬP TRÌNH}\\ [3cm]
+
+\begin{center}
+Giảng viên: TS. Võ Đình Hiếu\\ [1.5cm]
+
+Nhóm: \\
+Hồ Thu Giang (25025060) \\
+Nguyễn Thị Ngọc Minh (25025080) \\
+\end{center}
+
+\vfill
+
+\textbf{Năm 2026}
+
+\end{center}
+\end{titlepage}
+
+\newpage
+
+# 1. Giới thiệu
+
+Ngôn ngữ GMLang được xây dựng dựa trên ngôn ngữ UPL trong đề bài, với mục tiêu mở rộng khả năng biểu đạt và hỗ trợ tốt hơn cho việc xây dựng trình biên dịch.
+
+GMLang vẫn giữ các đặc điểm cốt lõi của UPL như cú pháp đơn giản, số lượng kiểu dữ liệu hạn chế và các cấu trúc điều khiển cơ bản, nhưng được cải tiến thêm một số tính năng như:
+
+- Suy luận kiểu (type inference)
+- Biểu thức logic (&&, ||, !) 
+- Thiết kế biểu diễn trung gian nhằm phục vụ quá trình sinh mã.
+
+Mục tiêu của bài là xây dựng một pipeline biên dịch đầy đủ từ mã nguồn GMLang đến bytecode, giúp minh họa rõ ràng cách hoạt động của một trình biên dịch.
+
+
+---
+
+# 2. Mục tiêu
+Thiết kế ngôn ngữ GMLang với cú pháp và ngữ nghĩa rõ ràng
+
+Xây dựng các thành phần của trình biên dịch:
+
+- Phân tích từ vựng (Lexer)
+- Phân tích cú pháp (Parser)
+- Phân tích ngữ nghĩa (Semantic Analysis)
+- Sinh bytecode (Code Generation)
+
+Thiết kế một máy ảo đơn giản (UPL-VM) sử dụng mô hình stack
+
+Sinh ra bytecode dễ hiểu, dễ kiểm tra và dễ mở rộng
+
+
+---
+
+# 3. Đặc tả từ vựng (Lexical Specification)
+Ngôn ngữ GMLang bao gồm các loại token chính như sau:
+
+## 3.1. Từ khóa (Keywords)
+Các từ khóa được định nghĩa trước và không thể sử dụng làm tên biến, bao gồm:
+
+```text
+begin, end, int, bool,float, string, 
+auto, if, then, else, elseif, do, 
+while, for, to, print, input
+```
+
+
+## 3.2. Định danh (Identifier)
+
+```regex
+IDENTIFIER = [a-zA-Z]+[0-9]*
+```
+
+Định danh được dùng để đặt tên biến và phải tuân theo quy tắc:
+
+* Bắt đầu bằng ký tự chữ cái
+* Có thể chứa các chữ cái tiếp theo
+* Nếu có chữ số, chỉ được xuất hiện ở cuối
+
+Ví dụ hợp lệ:
+
+```text
+x, abc, var123
+```
+
+Ví dụ không hợp lệ:
+
+```text
+1abc, ab1c
+```
+
+
+## 3.3. Hằng số (Literals)
+Ngôn ngữ hỗ trợ hai loại hằng:
+
+- Số nguyên: 0, 1, 100,...
+- Giá trị logic: true, false
+- Số thập phân: 0.1, 0.02,...
+- Chuỗi: abc, xyz,...
+
+
+## 3.4. Toán tử (Operators)
+
+GMLang hỗ trợ các toán tử:
+
+- Toán học: +, *, -,/
+- So sánh: >, >=, ==, <=
+- Logic: &&, ||, !
+- Gán: =
+
+
+## 3.5. Ký hiệu phân tách (Separators)
+
+Các ký hiệu phân tách gồm:
+```text
+; ( ) { }
+```
+
+
+## 3.6. Chú thích (Comments)
+
+Ngôn ngữ hỗ trợ hai dạng chú thích:
+
+```java
+// chú thích một dòng
+
+/* chú thích nhiều dòng */
+```
+
+---
+
+# 4. Đặc tả cú pháp (Syntax Specification)
+
+## Cấu trúc tổng quát chương trình
+
+```text
+begin
+{
+  <khai báo và câu lệnh>
+}
+end
+```
+
+
+## 4.1. Khai báo biến
+Biến phải được khai báo trước khi sử dụng. GMLang hỗ trợ ba kiểu khai báo:
+
+- Khai báo thông thường:
+```java
+int x;
+bool a;
+```
+
+- Khai báo có khởi tạo:
+
+```java
+int y = 5;
+```
+
+- Khai báo sử dụng suy luận kiểu:
+
+```java
+auto z = 10;
+auto b = true;
+```
+
+## 4.2. Câu lệnh gán
+
+Câu lệnh gán có dạng:
+
+```java
+x = 10;
+y = x + 2;
+```
+
+## 4.3. Câu lệnh điều kiện
+
+GMLang hỗ trợ ba dạng câu lệnh điều kiện:
+
+- If - then
+
+```java
+if (x > 5) then {
+  print(x);
+}
+```
+
+- If - then - else:
+
+```java
+if (x > 5) then {
+  print(x);
+} else {
+  print(0);
+}
+```
+
+- If - then - elseif (có thể nhiều lần) - else:
+
+```java
+if (x > 5) then {
+   print(x);
+} elseif (x > 3) {
+   print(1);
+} else {
+   print (2);
+}
+```
+
+GMLang hỗ trợ thêm cấu trúc elseif nhằm biểu diễn nhiều nhánh điều kiện một cách ngắn gọn. Về bản chất, elseif được chuyển đổi nội bộ thành các câu lệnh if lồng nhau trong quá trình sinh AST.
+
+## 4.4. Vòng lặp
+
+Ngôn ngữ hỗ trợ hai loại vòng lặp:
+
+### Do – while
+
+```java
+do {
+  x = x + 1;
+} while (x > 5);
+```
+
+### For
+
+```java
+for (x = 0 to 10 step 1) {
+  print(x);
+}
+```
+
+
+## 4.5. Lệnh in
+
+Lệnh in có dạng:
+
+```java
+print(x);
+print(x + 1);
+```
+
+
+## 4.6. Biểu thức
+GMLang hỗ trợ các loại biểu thức:
+- Biểu thức số học: sử dụng + và *
+- Biểu thức so sánh: >, >=, ==, <=
+- Biểu thức logic: &&, ||, !
+ 
+Ví dụ:
+
+```text
+(x + 2) * 3 > 10 && !a
+```
+
+
+## 4.7. Độ ưu tiên toán tử
+
+| Mức | Toán tử   |   |   |
+| --- | --------- | - | - |
+| 1   | !         |   |   |
+| 2   | *, /      |   |   |
+| 3   | +, -      |   |   |
+| 4   | >, >=, ==, <=, < |   |   |
+| 5   | &&        |   |   |
+| 6   | ||        |   |   |
+
+Dấu ngoặc () được sử dụng để thay đổi thứ tự ưu tiên của các phép toán.
+
+Biểu thức nằm trong dấu ngoặc sẽ được tính trước, bất kể thứ tự ưu tiên mặc định của toán tử.
+
+
+---
+
+# 5. Văn phạm (Grammar – BNF)
+
+```bnf
+Program ::= "begin" Block "end"
+
+Block ::= "{" DeclList StmtList "}"
+
+DeclList ::= Decl DeclList | ε
+StmtList ::= Stmt StmtList | ε
+
+Decl ::= Type Identifier ("=" Expr)? ";"
+
+Type ::= "int" | "bool" | "auto"
+
+Stmt ::= AssignStmt
+       | IfStmt
+       | WhileStmt
+       | ForStmt
+       | PrintStmt
+       | Block
+
+AssignStmt ::= Identifier "=" Expr ";"
+AssignExpr ::= Identifier "=" Expr
+
+IfStmt ::= "if" "(" Expr ")" "then" Stmt
+         | "if" "(" Expr ")" "then" Stmt "else" Stmt
+         | "if" "(" Expr ")" "then" Stmt "elseif" "(" Expr ")" "then" Stmt "else" Stmt
+
+WhileStmt ::= "do" Stmt "while" "(" Expr ")" ";"
+
+ForStmt ::= "for" "(" Identifier "=" Expr "to" Expr StepOpt ")" Stmt
+StepOpt ::= "step" Expr | ε
+
+PrintStmt ::= "print" "(" Expr ")" ";"
+
+Expr ::= Expr "||" AndExpr | AndExpr
+AndExpr ::= AndExpr "&&" EqualityExpr | EqualityExpr
+EqualityExpr ::= EqualityExpr "==" RelExpr | RelExpr
+RelExpr ::= RelExpr (">" | ">=") AddExpr | AddExpr
+AddExpr ::= AddExpr "+" MulExpr | MulExpr
+MulExpr ::= MulExpr "*" UnaryExpr | UnaryExpr
+UnaryExpr ::= "!" UnaryExpr | Primary
+
+Literal ::= INT_LITERAL | BOOL_LITERAL | FLOAT_LITERAL | STRING_LITERAL
+Primary ::= Identifier | Literal | "(" Expr ")"
+```
+
+---
+
+# 6. Phân tích cú pháp (Parser & AST)
+
+Sử dụng **Recursive Descent Parser**.
+
+Ví dụ AST:
+
+```text
+y = x + 2
+
+Assign
+|-- id: y
+`-- Add
+    |-- x
+    `-- 2
+```
+
+---
+
+# 7. Đặc tả ngữ nghĩa (Semantic Specification)
+
+## 7.1. Bảng ký hiệu (Symbol Table)
+
+Bảng ký hiệu (Symbol Table) được sử dụng trong quá trình phân tích ngữ nghĩa để lưu trữ thông tin về các biến đã được khai báo trong chương trình.
+
+Mỗi mục trong bảng ký hiệu bao gồm các thông tin sau:
+
+
+| Tên biến | Kiểu | Phạm vi | Index |
+| -------- | ---- | ------- | ----- |
+| x        | int  | global  | 1     |
+| y        | int  | block   | 2     |
+
+Trong đó:
+- Tên biến (Name): định danh của biến
+- Kiểu dữ liệu (Type): int, bool, string, float (hoặc suy luận từ auto)
+- Phạm vi (Scope): xác định theo khối { }
+- Chỉ số (Index): vị trí của biến trong local variable của JVM
+
+### Cách hoạt động
+
+* Khi khai báo:
+
+  * Thêm vào Symbol Table
+  * Kiểm tra trùng tên
+
+* Khi sử dụng:
+
+  * Tra cứu bảng
+  * Kiểm tra kiểu
+
+* Khi ra khỏi block:
+
+  * Xóa biến khỏi bảng
+
+
+### Ánh xạ JVM
+
+Mỗi biến sẽ được ánh xạ sang một local variable slot
+```text
+x → slot 1 → istore_1 / iload_1
+y → slot 2 → istore_2 / iload_2
+```
+
+
+## 7.2. Phạm vi (Scope)
+
+* Phạm vi của biến được xác định bởi các khối `{ }`
+* Biến chỉ có hiệu lực trong phạm vi mà nó được khai báo và các phạm vi con
+
+
+## 7.3. Kiểm tra khai báo
+
+* Biến phải được khai báo trước khi sử dụng
+* Không được khai báo trùng tên trong cùng một phạm vi.
+
+
+## 7.4. Kiểm tra kiểu dữ liệu
+
+Các quy tắc kiểm tra kiểu:
+
+- Phép cộng và nhân chỉ áp dụng cho kiểu int, float
+- Phép so sánh >, >= chỉ áp dụng cho int, float
+- Phép == áp dụng cho cả int, bool, float, string
+- Các phép logic (&&, ||, !) chỉ áp dụng cho bool.
+
+
+## 7.5. Suy luận kiểu (Type Inference)
+
+Từ khóa auto cho phép trình biên dịch tự động suy ra kiểu của biến dựa trên giá trị khởi tạo.
+
+```java
+auto x = 5;         // int
+auto a = true;      // bool
+auto a = 5.5        // float
+auto a = “hello”    // string
+
+```
+
+
+## 7.6. Lỗi ngữ nghĩa
+
+Một số lỗi phổ biến:
+
+- Gán sai kiểu:
+
+```java
+int x;
+x = true;   // sai kiểu
+```
+
+- Sử dụng biến chưa được khai báo
+
+```java
+x = 5;      // chưa khai báo
+```
+
+---
+
+# 8. Biểu diễn trung gian (Intermediate Representation)
+
+GMLang sử dụng một máy ảo đơn giản dạng stack để biểu diễn chương trình.
+
+Các lệnh cơ bản gồm:
+
+- PUSH: đẩy giá trị lên stack
+- LOAD: lấy giá trị biến
+- STORE: gán giá trị
+- ADD, MUL: phép toán số học
+- GT, GE, EQ: phép so sánh
+- AND, OR, NOT: phép logic
+- JMP, JMP_IF_FALSE: điều khiển luồng
+- PRINT: in kết quả
+- HALT: kết thúc chương trình
+
+
+---
+
+# 9. Sinh mã (Code Generation)
+
+Quá trình sinh mã chuyển chương trình nguồn thành bytecode của máy ảo.
+
+## Ví dụ
+
+### Source
+
+```java
+int x = 1;
+int y = x + 2;
+print(y);
+```
+
+---
+
+### Bytecode (UPL-VM)
+
+```text
+PUSH 1
+STORE x
+LOAD x
+PUSH 2
+ADD
+STORE y
+LOAD y
+PRINT
+HALT
+```
+
+---
+
+### Mapping sang JVM
+
+| UPL-VM  | JVM      |
+| ------- | -------- |
+| PUSH 1  | iconst_1 |
+| LOAD x  | iload    |
+| STORE x | istore   |
+| ADD     | iadd     |
+| MUL     | imul     |
+
+```java
+getstatic java/lang/System/out Ljava/io/PrintStream;
+invokevirtual java/io/PrintStream/println(I)V
+```
+
+---
+
+# 10. Xử lý lỗi (Error Handling)
+
+Trình biên dịch phát hiện và xử lý ba loại lỗi:
+
+- Lỗi từ vựng: ký tự không hợp lệ
+- Lỗi cú pháp: sai cấu trúc câu lệnh
+- Lỗi ngữ nghĩa: sai kiểu hoặc chưa khai báo
+
+Chiến lược xử lý lỗi:
+
+- Không dừng ngay khi gặp lỗi
+- Bỏ qua đến dấu ; hoặc } để tiếp tục phân tích
+
+---
+
+# 11. Quy trình xây dựng trình biên dịch và điểm cải tiến
+
+Ngôn ngữ GMLang không chỉ dừng lại ở việc định nghĩa cú pháp và ngữ nghĩa, mà còn được thiết kế để hỗ trợ một quy trình biên dịch hoàn chỉnh từ mã nguồn đến bytecode.
+
+Quá trình biên dịch của GMLang được tổ chức theo các bước liên tiếp như sau:
+
+- Đầu tiên, bộ phân tích từ vựng (Lexer) thực hiện việc đọc mã nguồn và chuyển đổi chuỗi ký tự thành các token. Giai đoạn này chịu trách nhiệm loại bỏ khoảng trắng, nhận diện từ khóa, định danh, toán tử và phát hiện các lỗi từ vựng.
+- Tiếp theo, bộ phân tích cú pháp (Parser) sử dụng các token để xây dựng cây cú pháp trừu tượng (AST). AST biểu diễn cấu trúc chương trình dưới dạng cây, giúp dễ dàng xử lý ở các bước sau.
+- Sau đó, bộ phân tích ngữ nghĩa (Semantic Analyzer) kiểm tra tính đúng đắn của chương trình, bao gồm kiểm tra khai báo biến, kiểm tra kiểu dữ liệu và xử lý phạm vi. Đồng thời, trong GMLang, giai đoạn này còn thực hiện suy luận kiểu cho các biến được khai báo bằng từ khóa auto.
+- Tiếp theo là bước sinh mã trung gian (Intermediate Representation – IR). GMLang sử dụng một máy ảo dạng stack (UPL-VM) để biểu diễn chương trình. Việc sử dụng IR giúp tách biệt giữa phần phân tích và phần sinh mã, từ đó dễ dàng tối ưu hóa và mở rộng hệ thống.
+- Cuối cùng, mã trung gian được chuyển đổi thành bytecode Java thông qua việc ánh xạ các lệnh của UPL-VM sang các lệnh tương ứng trên JVM.
+
+
+```text
+Source Code (GMLang)
+↓
+Lexical Analysis
+↓
+Syntax Analysis (AST)
+↓
+Semantic Analysis
+↓
+Intermediate Code (UPL-VM)
+↓
+Bytecode Generation
+↓
+Java Bytecode (JVM)
+```
+
+Bên cạnh việc xây dựng đầy đủ pipeline compiler, GMLang còn có một số điểm cải tiến so với ngôn ngữ ban đầu:
+
+- Thứ nhất, ngôn ngữ bổ sung cơ chế suy luận kiểu thông qua từ khóa auto, giúp giảm bớt việc khai báo kiểu và tăng tính linh hoạt.
+- Thứ hai, hệ thống biểu thức được mở rộng với các toán tử logic như &&, ||, !, cho phép biểu diễn các điều kiện phức tạp hơn.
+- Thứ ba, việc thiết kế một biểu diễn trung gian (UPL-VM) giúp chương trình có thể được tối ưu hóa và dễ dàng chuyển đổi sang nhiều nền tảng khác nhau, không chỉ riêng Java.
+- Cuối cùng, trình biên dịch được xây dựng theo mô hình nhiều pha, tương tự các hệ thống compiler thực tế, giúp tăng tính rõ ràng, dễ bảo trì và dễ mở rộng.
+
+
+---
+
+# 12. Ví dụ full pipeline
+
+## Source
+
+```java
+int x = 1 + 2;
+```
+
+
+## Token
+
+```text
+int, x, =, 1, +, 2
+```
+
+## AST
+
+```text
+Assign
+|-- id: x
+`-- Add
+    |-- 1
+    `-- 2
+```
+
+
+## IR
+
+```text
+PUSH 1
+PUSH 2
+ADD
+STORE x
+```
+
+
+## JVM
+
+```text
+iconst_1
+iconst_2
+iadd
+istore_1
+```
+
+---
+
+# 13. Kết luận
+
+GMLang là phiên bản cải tiến của UPL với cú pháp đơn giản nhưng mạnh hơn, hỗ trợ biểu thức logic, suy luận kiểu và có thiết kế trình biên dịch đầy đủ. Ngôn ngữ này không chỉ đáp ứng yêu cầu của đề bài mà còn thể hiện rõ cấu trúc của một hệ thống compiler hiện đại, dễ mở rộng và tối ưu trong tương lai.
+
+GMLang có thể mở rộng để hỗ trợ:
+
+- function
+- array
+- optimization (constant folding)
+
+
