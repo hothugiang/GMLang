@@ -323,13 +323,15 @@ Stmt ::= AssignStmt
 AssignStmt ::= Identifier "=" Expr ";"
 AssignExpr ::= Identifier "=" Expr
 
-IfStmt ::= "if" "(" Expr ")" "then" Stmt ElseIfList "else" Stmt
+IfStmt ::= "if" "(" Expr ")" "then" Stmt IfTail
+
+IfTail ::= "elseif" "(" Expr ")" Stmt ElseIfList "else" Stmt | "else" Stmt | epsilon
+
 ElseIfList ::= "elseif" "(" Expr ")" Stmt ElseIfList | epsilon
 
 WhileStmt ::= "do" Stmt "while" "(" Expr ")" ";"
 
-ForStmt ::= "for" "(" Identifier "=" Expr "to" Expr StepOpt ")" Stmt
-StepOpt ::= "step" Expr | epsilon
+ForStmt ::= "for" "(" Identifier "=" Expr "to" Expr "step" INT_LITERAL ")" Stmt
 
 PrintStmt ::= "print" "(" Expr ")" ";"
 
@@ -339,7 +341,7 @@ EqualityExpr ::= EqualityExpr "==" RelExpr | RelExpr
 RelExpr ::= RelExpr (">" | ">=" | "<" | "<=") AddExpr | AddExpr
 AddExpr ::= AddExpr ("+" | "-") MulExpr | MulExpr
 MulExpr ::= MulExpr ("*" | "/") UnaryExpr | UnaryExpr
-UnaryExpr ::= "!" UnaryExpr | Primary
+UnaryExpr ::= "!" UnaryExpr | "-" UnaryExpr | Primary
 
 Literal ::= INT_LITERAL | BOOL_LITERAL | FLOAT_LITERAL | STRING_LITERAL
 Primary ::= Identifier | Literal | "(" Expr ")"
