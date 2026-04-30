@@ -6,22 +6,28 @@ class TokenType(Enum):
     # 1. KEYWORDS (từ khóa)
     BEGIN = auto()
     END = auto()
+
     INT = auto()
     BOOL = auto()
     FLOAT = auto()
     STRING = auto()
     AUTO = auto()
+
     IF = auto()
     THEN = auto()
     ELSE = auto()
     ELSEIF = auto()
+
     DO = auto()
     WHILE = auto()
+
     FOR = auto()
     TO = auto()
     STEP = auto()
+
     PRINT = auto()
     INPUT = auto()
+
     TRUE = auto()
     FALSE = auto()
 
@@ -36,7 +42,9 @@ class TokenType(Enum):
     MINUS = auto()   # -
     MUL = auto()     # *
     DIV = auto()     # /
+
     ASSIGN = auto()  # =
+    
     EQ = auto()      # ==
     GT = auto()      # >
     GE = auto()      # >=

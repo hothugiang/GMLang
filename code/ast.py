@@ -25,11 +25,13 @@ class Assign(AST):
         self.name = name
         self.expr = expr
 
+class Input(AST):
+    def __init__(self, name):
+        self.name = name
 
 class Print(AST):
     def __init__(self, expr):
         self.expr = expr
-
 
 class If(AST):
     def __init__(self, condition, then_branch, elif_branches, else_branch):
@@ -80,10 +82,15 @@ class Bool(AST):
     def __init__(self, value):
         self.value = value
 
-class Float(AST):
-    def __init__(self, value):
-        self.value = value
-        
+# class Float(AST):
+#     def __init__(self, value):
+#         self.value = value
+
 class Var(AST):
     def __init__(self, name):
         self.name = name
+
+class While(AST):
+    def __init__(self,body, condition):
+        self.body = body
+        self.condition = condition

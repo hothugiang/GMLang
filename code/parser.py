@@ -9,43 +9,53 @@ class Parser:
         self.lexer = lexer
         self.current_token = self.lexer.get_next_token()
 
+    # =========================
+    # UTIL
+    # =========================
     def eat(self, token_type):
         if self.current_token.type == token_type:
             self.current_token = self.lexer.get_next_token()
         else:
-            raise Exception(f"Lỗi cú pháp: Mong đợi {token_type} nhưng nhận được {self.current_token.type}")
+            raise Exception(f"Unexpected token {self.current_token}, expected {token_type}")
 
-    # ===== PROGRAM =====
+    # =========================
+    # PROGRAM
+    # =========================
     def parse(self):
         self.eat(TokenType.BEGIN)
         block = self.block()
         self.eat(TokenType.END)
         return Program(block)
 
-    # ===== BLOCK =====
+    # =========================
+    # BLOCK
+    # =========================
     def block(self):
         self.eat(TokenType.LBRACE)
+
         decls = []
         stmts = []
 
+        # DECL LIST
         while self.current_token.type in (
             TokenType.INT, TokenType.BOOL, TokenType.FLOAT,
             TokenType.STRING, TokenType.AUTO
         ):
             decls.append(self.declaration())
 
+        # STMT LIST
         while self.current_token.type not in (TokenType.RBRACE, TokenType.EOF):
             stmts.append(self.statement())
 
         self.eat(TokenType.RBRACE)
         return Block(decls, stmts)
 
-    # ===== DECL =====
+    # =========================
+    # DECL
+    # =========================
     def declaration(self):
-        var_type_token = self.current_token.type
-        var_type = var_type_token.name.lower()
-
-        self.eat(var_type_token)
+        var_type = self.current_token.type.name.lower()
+        self.eat(self.current_token.type)
 
         name = self.current_token.value
         self.eat(TokenType.IDENTIFIER)
@@ -56,58 +66,96 @@ class Parser:
             expr = self.expr()
 
         self.eat(TokenType.SEMICOLON)
-
         return VarDecl(var_type, name, expr)
-    # ===== STATEMENT =====
+
+    # =========================
+    # STATEMENT
+    # =========================
     def statement(self):
         token = self.current_token.type
 
         if token == TokenType.IDENTIFIER:
             return self.assign_stmt()
+
         elif token == TokenType.PRINT:
             return self.print_stmt()
+
+        elif token == TokenType.INPUT:
+            return self.input_stmt()
+
         elif token == TokenType.IF:
             return self.if_stmt()
+
         elif token == TokenType.FOR:
             return self.for_stmt()
+
+        elif token == TokenType.DO:
+            return self.while_stmt()
+
         elif token == TokenType.LBRACE:
             return self.block()
+
         else:
             raise Exception(f"Invalid statement: {self.current_token}")
 
-    # ===== ASSIGN =====
+    # =========================
+    # ASSIGN
+    # =========================
     def assign_stmt(self):
         name = self.current_token.value
         self.eat(TokenType.IDENTIFIER)
+
         self.eat(TokenType.ASSIGN)
         expr = self.expr()
+
         self.eat(TokenType.SEMICOLON)
         return Assign(name, expr)
 
-    # ===== PRINT =====
+    # =========================
+    # PRINT
+    # =========================
     def print_stmt(self):
         self.eat(TokenType.PRINT)
+
         self.eat(TokenType.LPAREN)
         expr = self.expr()
         self.eat(TokenType.RPAREN)
+
         self.eat(TokenType.SEMICOLON)
         return Print(expr)
 
-    # ===== IF =====
+    # =========================
+    # INPUT
+    # =========================
+    def input_stmt(self):
+        self.eat(TokenType.INPUT)
+
+        self.eat(TokenType.LPAREN)
+        name = self.current_token.value
+        self.eat(TokenType.IDENTIFIER)
+        self.eat(TokenType.RPAREN)
+
+        self.eat(TokenType.SEMICOLON)
+        return Input(name)
+
+    # =========================
+    # IF
+    # =========================
     def if_stmt(self):
         self.eat(TokenType.IF)
+
         self.eat(TokenType.LPAREN)
         condition = self.expr()
         self.eat(TokenType.RPAREN)
-        self.eat(TokenType.THEN)
 
+        self.eat(TokenType.THEN)
         then_branch = self.statement()
 
-        # danh sách elseif
+        # elseif list
         elif_branches = []
-
         while self.current_token.type == TokenType.ELSEIF:
             self.eat(TokenType.ELSEIF)
+
             self.eat(TokenType.LPAREN)
             cond = self.expr()
             self.eat(TokenType.RPAREN)
@@ -123,9 +171,13 @@ class Parser:
 
         return If(condition, then_branch, elif_branches, else_branch)
 
-    # ===== FOR =====
+    # =========================
+    # FOR
+    # =========================
     def for_stmt(self):
         self.eat(TokenType.FOR)
+
+        self.eat(TokenType.LPAREN)
 
         var = self.current_token.value
         self.eat(TokenType.IDENTIFIER)
@@ -136,15 +188,35 @@ class Parser:
         self.eat(TokenType.TO)
         end = self.expr()
 
-        step = None
-        if self.current_token.type == TokenType.STEP:
-            self.eat(TokenType.STEP)
-            step = self.expr()
+        self.eat(TokenType.STEP)
+        step = self.expr()
 
-        body = self.block()
+        self.eat(TokenType.RPAREN)
+
+        body = self.statement()
         return For(var, start, end, step, body)
 
-    # ===== EXPRESSIONS =====
+    # =========================
+    # WHILE (do-while)
+    # =========================
+    def while_stmt(self):
+        self.eat(TokenType.DO)
+
+        body = self.statement()
+
+        self.eat(TokenType.WHILE)
+        self.eat(TokenType.LPAREN)
+
+        condition = self.expr()
+
+        self.eat(TokenType.RPAREN)
+        self.eat(TokenType.SEMICOLON)
+
+        return While(body, condition)
+
+    # =========================
+    # EXPRESSIONS
+    # =========================
     def expr(self):
         node = self.and_expr()
         while self.current_token.type == TokenType.OR:
@@ -171,7 +243,10 @@ class Parser:
 
     def relational(self):
         node = self.add()
-        while self.current_token.type in (TokenType.GT, TokenType.GE, TokenType.LT, TokenType.LE):
+        while self.current_token.type in (
+            TokenType.GT, TokenType.GE,
+            TokenType.LT, TokenType.LE
+        ):
             op = self.current_token
             self.eat(op.type)
             node = BinOp(node, op, self.add())
@@ -198,6 +273,12 @@ class Parser:
             op = self.current_token
             self.eat(TokenType.NOT)
             return UnaryOp(op, self.unary())
+
+        if self.current_token.type == TokenType.MINUS:
+            op = self.current_token
+            self.eat(TokenType.MINUS)
+            return UnaryOp(op, self.unary())
+
         return self.primary()
 
     def primary(self):
@@ -217,7 +298,7 @@ class Parser:
 
         if token.type in (TokenType.TRUE, TokenType.FALSE):
             self.eat(token.type)
-            return Bool(token.value)
+            return Bool(token.type == TokenType.TRUE)
 
         if token.type == TokenType.IDENTIFIER:
             self.eat(TokenType.IDENTIFIER)
@@ -230,4 +311,3 @@ class Parser:
             return node
 
         raise Exception(f"Invalid expression: {token}")
-    

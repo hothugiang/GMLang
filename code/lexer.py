@@ -1,8 +1,5 @@
 # lexer.py
-
-import re
 from token import Token, TokenType
-
 
 class Lexer:
     """
@@ -21,6 +18,11 @@ class Lexer:
         if self.pos >= len(self.text):
             return None
         return self.text[self.pos]
+    
+    def peek(self):
+        if self.pos + 1 >= len(self.text):
+            return None
+        return self.text[self.pos + 1]
 
     # Di chuyển sang ký tự tiếp theo
     def advance(self):
@@ -40,15 +42,15 @@ class Lexer:
     # Bỏ qua comment
     def skip_comment(self):
         # Comment 1 dòng: //
-        if self.text[self.pos:self.pos+2] == "//":
+        if self.current_char() == '/' and self.peek() == '/':
             while self.current_char() and self.current_char() != '\n':
                 self.advance()
 
         # Comment nhiều dòng: /* ... */
-        elif self.text[self.pos:self.pos+2] == "/*":
+        elif self.current_char() == '/' and self.peek() == '*':
             self.advance()
             self.advance()
-            while self.current_char() and self.text[self.pos:self.pos+2] != "*/":
+            while self.current_char() and not (self.current_char() == '*' and self.peek() == '/'):
                 self.advance()
             self.advance()
             self.advance()
