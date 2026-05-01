@@ -1,0 +1,635 @@
+# Giải Thích Code GMLang Compiler
+
+Tài liệu này giải thích từng file `.py` trong thư mục `code/` và cách các file phối hợp với nhau để biên dịch chương trình GMLang thành bytecode chạy trên JVM.
+
+Pipeline tổng thể:
+
+```text
+File .gm
+-> lexer.py
+-> parser.py
+-> ast.py
+-> semantic.py
+-> codegen.py
+-> classfile.py
+-> compiler.py
+-> JVM
+```
+
+## 1. `token.py`
+
+File này định nghĩa các loại token của ngôn ngữ GMLang.
+
+Thành phần chính:
+
+- `TokenType`: enum chứa tất cả loại token.
+- `Token`: class biểu diễn một token cụ thể.
+
+Ví dụ source:
+
+```gmlang
+int x = 10;
+```
+
+sẽ được lexer tách thành các token:
+
+```text
+INT
+IDENTIFIER(x)
+ASSIGN
+INT_LITERAL(10)
+SEMICOLON
+```
+
+Mỗi `Token` có:
+
+```python
+type    # loại token
+value   # giá trị thật
+line    # dòng xuất hiện
+column  # cột xuất hiện
+```
+
+File này được dùng trực tiếp bởi:
+
+- `lexer.py`
+- `parser.py`
+
+## 2. `lexer.py`
+
+File này là bộ phân tích từ vựng.
+
+Nhiệm vụ:
+
+```text
+source code dạng chuỗi -> danh sách token
+```
+
+Lexer xử lý:
+
+- Keyword: `begin`, `end`, `int`, `bool`, `float`, `string`, `auto`, `if`, `then`, `else`, `elseif`, `do`, `while`, `for`, `to`, `step`, `print`, `input`
+- Identifier theo rule:
+
+```regex
+[a-zA-Z]+[0-9]*
+```
+
+- Literal:
+  - số nguyên
+  - số thực
+  - chuỗi
+  - boolean `true`, `false`
+- Toán tử:
+  - `+`, `-`, `*`, `/`
+  - `>`, `>=`, `<`, `<=`, `==`
+  - `&&`, `||`, `!`
+  - `=`
+- Dấu phân tách:
+  - `;`, `(`, `)`, `{`, `}`
+- Comment:
+  - `// comment một dòng`
+  - `/* comment nhiều dòng */`
+
+Các hàm quan trọng:
+
+- `get_next_token()`: lấy token tiếp theo.
+- `number()`: đọc số nguyên hoặc số thực.
+- `string()`: đọc chuỗi.
+- `identifier()`: đọc identifier hoặc keyword.
+- `skip_comment()`: bỏ qua comment.
+
+Ví dụ:
+
+```gmlang
+auto x = 3.14;
+```
+
+Lexer tạo:
+
+```text
+AUTO(auto)
+IDENTIFIER(x)
+ASSIGN(=)
+FLOAT_LITERAL(3.14)
+SEMICOLON(;)
+```
+
+Nếu identifier sai:
+
+```gmlang
+int ab1c;
+```
+
+Lexer báo lỗi vì chữ số chỉ được nằm ở cuối.
+
+## 3. `ast.py`
+
+File này định nghĩa các node của AST.
+
+AST là viết tắt của Abstract Syntax Tree, tức cây cú pháp trừu tượng.
+
+Sau khi parser đọc token, parser không giữ source code dạng chuỗi nữa mà tạo ra cây AST.
+
+Các node chính:
+
+- `Program`: toàn bộ chương trình.
+- `Block`: block `{ ... }`.
+- `VarDecl`: khai báo biến.
+- `Assign`: gán biến.
+- `Input`: câu lệnh `input(...)`.
+- `Print`: câu lệnh `print(...)`.
+- `If`: câu lệnh `if / elseif / else`.
+- `ElseIf`: một nhánh `elseif`.
+- `For`: vòng lặp `for`.
+- `While`: vòng lặp `do while`.
+- `BinOp`: toán tử hai vế, ví dụ `x + 1`.
+- `UnaryOp`: toán tử một vế, ví dụ `!ok`, `-x`.
+- `Num`: số nguyên hoặc số thực.
+- `String`: chuỗi.
+- `Bool`: boolean.
+- `Var`: biến.
+
+Ví dụ source:
+
+```gmlang
+x = 1 + 2;
+```
+
+AST tương ứng:
+
+```text
+Assign
+  name: x
+  expr:
+    BinOp +
+      left: Num(1)
+      right: Num(2)
+```
+
+Mỗi node AST có thể lưu thêm:
+
+```python
+line
+column
+```
+
+Thông tin này dùng để báo lỗi chính xác dòng/cột.
+
+## 4. `parser.py`
+
+File này là bộ phân tích cú pháp.
+
+Parser dùng kỹ thuật recursive descent parser.
+
+Nhiệm vụ:
+
+```text
+token stream -> AST
+```
+
+Parser kiểm tra chương trình có đúng cú pháp GMLang không.
+
+Ví dụ cấu trúc chương trình hợp lệ:
+
+```gmlang
+begin
+{
+    int x = 1;
+    print(x);
+}
+end
+```
+
+Các nhóm hàm chính:
+
+### Parse chương trình
+
+- `parse()`: parse toàn bộ chương trình.
+- `block()`: parse block `{ ... }`.
+
+### Parse statement
+
+- `declaration()`: khai báo biến.
+- `statement()`: chọn loại statement.
+- `assign_stmt()`: gán biến.
+- `print_stmt()`: `print(...)`.
+- `input_stmt()`: `input(...)`.
+- `if_stmt()`: `if / elseif / else`.
+- `for_stmt()`: vòng `for`.
+- `while_stmt()`: vòng `do while`.
+
+### Parse expression
+
+Parser chia expression thành nhiều mức để xử lý độ ưu tiên toán tử:
+
+```text
+expr          -> ||
+and_expr      -> &&
+equality      -> ==
+relational    -> > >= < <=
+add           -> + -
+mul           -> * /
+unary         -> ! -
+primary       -> literal, variable, (...)
+```
+
+Ví dụ:
+
+```gmlang
+x + 2 * 3
+```
+
+Parser hiểu là:
+
+```text
+x + (2 * 3)
+```
+
+chứ không phải:
+
+```text
+(x + 2) * 3
+```
+
+Parser cũng có error recovery cơ bản: khi gặp lỗi cú pháp, nó bỏ qua đến `;` hoặc `}` để cố gắng tìm thêm lỗi tiếp theo.
+
+## 5. `semantic.py`
+
+File này là bộ phân tích ngữ nghĩa.
+
+Sau parser, chương trình có thể đúng cú pháp nhưng sai ngữ nghĩa.
+
+Ví dụ đúng cú pháp nhưng sai ngữ nghĩa:
+
+```gmlang
+begin
+{
+    int x;
+    x = true;
+}
+end
+```
+
+Cú pháp đúng, nhưng sai vì `x` là `int` mà lại gán `bool`.
+
+`semantic.py` kiểm tra các lỗi kiểu này.
+
+Nhiệm vụ chính:
+
+- Biến phải được khai báo trước khi dùng.
+- Không được khai báo trùng biến trong cùng scope.
+- Scope theo block `{ ... }`.
+- Gán biến phải đúng kiểu.
+- `auto` phải có giá trị khởi tạo.
+- Suy luận kiểu cho `auto`.
+- Toán tử số học chỉ dùng với `int` hoặc `float`.
+- Toán tử logic chỉ dùng với `bool`.
+- Điều kiện `if`, `elseif`, `while` phải là `bool`.
+- Biến trong `for` phải là `int`.
+- `start`, `end`, `step` của `for` phải là `int`.
+
+File này cũng tạo symbol table.
+
+Mỗi symbol lưu:
+
+```python
+{
+    "name": "x",
+    "type": "int",
+    "scope": "global",
+    "index": 1,
+    "line": 4,
+    "column": 9
+}
+```
+
+Ý nghĩa:
+
+- `name`: tên biến.
+- `type`: kiểu dữ liệu.
+- `scope`: phạm vi khai báo.
+- `index`: vị trí local variable slot cho JVM.
+- `line`, `column`: vị trí khai báo.
+
+Hàm quan trọng:
+
+- `analyze(node)`: chạy semantic analyzer.
+- `visit(node)`: gọi đúng hàm xử lý cho từng loại AST node.
+- `declare(...)`: khai báo biến vào symbol table.
+- `lookup(...)`: tìm biến trong scope hiện tại và scope cha.
+- `get_symbol_table()`: lấy symbol table.
+
+## 6. `codegen.py`
+
+File này sinh mã JVM dạng text.
+
+Nhiệm vụ:
+
+```text
+AST -> JVM instruction text
+```
+
+Ví dụ GMLang:
+
+```gmlang
+int x = 1 + 2;
+print(x);
+```
+
+Code generator sinh:
+
+```text
+iconst_1
+iconst_2
+iadd
+istore 1
+getstatic java/lang/System/out Ljava/io/PrintStream;
+iload 1
+invokevirtual java/io/PrintStream/println(I)V
+```
+
+File này xử lý:
+
+- Cấp slot cho biến.
+- Sinh lệnh load/store:
+  - `iload`, `istore`
+  - `fload`, `fstore`
+  - `aload`, `astore`
+- Sinh toán tử:
+  - `iadd`, `isub`, `imul`, `idiv`
+  - `fadd`, `fsub`, `fmul`, `fdiv`
+- Sinh so sánh:
+  - `if_icmpgt`, `if_icmpge`, ...
+- Sinh label cho:
+  - `if`
+  - `elseif`
+  - `else`
+  - `for`
+  - `do while`
+- Sinh `print(...)`.
+- Sinh `input(...)` bằng `java.util.Scanner`.
+
+Ví dụ `input(x);` với `int x` sẽ sinh logic tương đương:
+
+```text
+new java/util/Scanner
+dup
+getstatic java/lang/System/in Ljava/io/InputStream;
+invokespecial java/util/Scanner/<init>(Ljava/io/InputStream;)V
+astore <scanner_slot>
+aload <scanner_slot>
+invokevirtual java/util/Scanner/nextInt()I
+istore <x_slot>
+```
+
+Kết quả của `codegen.py` vẫn chưa phải file `.class`. Nó mới là mã JVM dạng text để đọc/debug.
+
+## 7. `classfile.py`
+
+File này tạo file `.class` thật từ phần JVM instruction text do `codegen.py` sinh ra.
+
+Nhiệm vụ:
+
+```text
+JVM instruction text -> bytecode JVM -> file .class
+```
+
+Project không gọi Jasmin hay `jasmin.jar`. File `.j` chỉ được ghi ra để đọc/debug, còn file `.class` được encode trực tiếp bằng Python trong `classfile.py`.
+
+File này làm các việc ở mức bytecode:
+
+- Ghi magic number `CAFEBABE`.
+- Tạo constant pool.
+- Tạo class name.
+- Tạo superclass `java/lang/Object`.
+- Tạo method `<init>`.
+- Tạo method `main`.
+- Encode instruction thành bytecode thật.
+- Tính offset cho label và branch instruction.
+
+Ví dụ:
+
+```text
+iconst_1
+iconst_2
+iadd
+```
+
+sẽ được encode thành bytecode trong:
+
+```text
+build/Main.class
+```
+
+File `.class` này chạy được bằng:
+
+```powershell
+java -cp build Main
+```
+
+Lưu ý: `classfile.py` không phải JVM assembler tổng quát. Nó chỉ hỗ trợ tập instruction mà `codegen.py` đang sinh ra cho GMLang.
+
+## 8. `compiler.py`
+
+File này là compiler driver, tức file nối toàn bộ pipeline lại.
+
+Nhiệm vụ:
+
+```text
+đọc file .gm
+-> Lexer
+-> Parser
+-> SemanticAnalyzer
+-> CodeGenerator
+-> assemble_class
+-> ghi Main.j để debug JVM instruction text
+-> ghi Main.class là bytecode thật
+-> nếu có --run thì gọi java để chạy
+```
+
+Cách dùng:
+
+```powershell
+python code\compiler.py example.gm
+```
+
+Lệnh này tạo:
+
+```text
+build/Main.j
+build/Main.class
+```
+
+Trong đó:
+
+- `Main.j`: file text chứa JVM instruction để đọc/debug.
+- `Main.class`: file bytecode thật được JVM thực thi.
+
+Vừa compile vừa chạy:
+
+```powershell
+python code\compiler.py example.gm --run
+```
+
+Đổi thư mục output:
+
+```powershell
+python code\compiler.py example.gm --out-dir build_demo
+```
+
+Đổi tên class:
+
+```powershell
+python code\compiler.py example.gm --class-name Demo
+```
+
+## 9. `main.py`
+
+File này dùng để demo/debug nhanh.
+
+Khác với `compiler.py`, `main.py` không đọc file `.gm` từ bên ngoài. Nó hard-code source GMLang trong biến:
+
+```python
+code = '''
+begin
+{
+    ...
+}
+end
+'''
+```
+
+Sau đó chạy:
+
+```text
+Lexer
+-> Parser
+-> SemanticAnalyzer
+-> CodeGenerator
+-> print AST
+-> print JVM code
+```
+
+Chạy:
+
+```powershell
+python code\main.py
+```
+
+Dùng `main.py` khi muốn:
+
+- Xem AST.
+- Debug parser.
+- Debug semantic.
+- Debug codegen.
+
+Dùng `compiler.py` khi muốn:
+
+- Compile file `.gm`.
+- Tạo `Main.j` để debug.
+- Tạo `Main.class` để chạy trên JVM.
+- Chạy bằng JVM.
+
+## 10. `errors.py`
+
+File này định nghĩa các loại lỗi dùng chung trong compiler.
+
+Các class lỗi:
+
+- `CompileError`: lỗi gốc.
+- `LexicalError`: lỗi từ vựng.
+- `ParseError`: lỗi cú pháp.
+- `SemanticError`: lỗi ngữ nghĩa.
+- `CodeGenError`: lỗi sinh mã.
+- `ErrorCollection`: gom nhiều lỗi, chủ yếu dùng trong parser recovery.
+
+Ví dụ lỗi:
+
+```text
+Cannot assign bool to int at 4:9
+```
+
+Nhờ `errors.py`, các phase khác nhau có cách báo lỗi thống nhất và có thể kèm dòng/cột.
+
+## Luồng Chạy Ví Dụ
+
+Với file `example.gm`:
+
+```gmlang
+begin
+{
+    int x = 10;
+
+    for (x = 0 to 5 step 1) {
+        print(x);
+    }
+}
+end
+```
+
+Chạy:
+
+```powershell
+python code\compiler.py example.gm --run
+```
+
+Luồng thực tế:
+
+```text
+example.gm
+-> compiler.py đọc file
+-> lexer.py tạo token
+-> parser.py tạo AST
+-> semantic.py kiểm tra kiểu/scope
+-> codegen.py sinh JVM instruction
+-> classfile.py tạo Main.class
+-> compiler.py gọi java -cp build Main
+```
+
+Output:
+
+```text
+0
+1
+2
+3
+4
+5
+6
+```
+
+## Tóm Tắt Vai Trò Từng File
+
+```text
+token.py      Định nghĩa loại token
+lexer.py      Source code -> token
+ast.py        Định nghĩa AST node
+parser.py     Token -> AST
+semantic.py   Kiểm tra ngữ nghĩa, type, scope, symbol table
+codegen.py    AST -> JVM instruction text
+classfile.py  JVM instruction text -> Main.class
+compiler.py   CLI compile file .gm
+main.py       Demo/debug nhanh
+errors.py     Hệ thống lỗi chung
+```
+
+## Trạng Thái Hiện Tại
+
+Project hiện đã có đủ các phần chính của compiler:
+
+- Lexer
+- Parser
+- AST
+- Semantic analyzer
+- Symbol table
+- Code generator
+- Sinh `.class`
+- Chạy trên JVM
+
+Một số giới hạn còn lại:
+
+- `String == String` chưa so sánh nội dung bằng `.equals`.
+- `&&` và `||` chưa short-circuit.
+- `for` phù hợp nhất với `step` dương.
+- Error recovery mới ở mức cơ bản.
+- Chưa có test suite riêng.

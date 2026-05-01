@@ -1,0 +1,7 @@
+begin
+{
+    int x;
+    input(x);
+    print(x + 1);
+}
+end

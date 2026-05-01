@@ -1,4 +1,5 @@
 # lexer.py
+from errors import LexicalError
 from token import Token, TokenType
 
 class Lexer:
@@ -48,10 +49,13 @@ class Lexer:
 
         # Comment nhiều dòng: /* ... */
         elif self.current_char() == '/' and self.peek() == '*':
+            start_line, start_col = self.line, self.col
             self.advance()
             self.advance()
             while self.current_char() and not (self.current_char() == '*' and self.peek() == '/'):
                 self.advance()
+            if not self.current_char():
+                raise LexicalError("Unterminated block comment", start_line, start_col)
             self.advance()
             self.advance()
 
@@ -80,7 +84,7 @@ class Lexer:
 
     # Xử lý chuỗi "..."
     def string(self):
-        start_col = self.col
+        start_line, start_col = self.line, self.col
         self.advance()  # bỏ dấu "
 
         result = ""
@@ -89,19 +93,35 @@ class Lexer:
             result += self.current_char()
             self.advance()
 
+        if not self.current_char():
+            raise LexicalError("Unterminated string literal", start_line, start_col)
+
         self.advance()  # bỏ dấu "
 
-        return Token(TokenType.STRING_LITERAL, result, self.line, start_col)
+        return Token(TokenType.STRING_LITERAL, result, start_line, start_col)
 
     # Xử lý identifier hoặc keyword
     def identifier(self):
-        start_col = self.col
+        start_line, start_col = self.line, self.col
         result = ""
 
-        # đọc chữ + số
-        while self.current_char() and self.current_char().isalnum():
+        while self.current_char() and self.current_char().isalpha():
             result += self.current_char()
             self.advance()
+
+        while self.current_char() and self.current_char().isdigit():
+            result += self.current_char()
+            self.advance()
+
+        if self.current_char() and self.current_char().isalpha():
+            while self.current_char() and self.current_char().isalnum():
+                result += self.current_char()
+                self.advance()
+            raise LexicalError(
+                f"Invalid identifier '{result}'. Digits are only allowed at the end",
+                start_line,
+                start_col,
+            )
 
         # danh sách keyword
         keywords = {
@@ -130,7 +150,7 @@ class Lexer:
         # nếu là keyword → trả keyword, không thì là identifier
         token_type = keywords.get(result, TokenType.IDENTIFIER)
 
-        return Token(token_type, result, self.line, start_col)
+        return Token(token_type, result, start_line, start_col)
 
     # Hàm chính: lấy token tiếp theo
     def get_next_token(self):
@@ -167,22 +187,22 @@ class Lexer:
             if self.text[self.pos:self.pos+2] == ">=":
                 line, col = self.line, self.col
                 self.advance(); self.advance()
-                return Token(TokenType.EQ, ">=", line, col)
+                return Token(TokenType.GE, ">=", line, col)
             
             if self.text[self.pos:self.pos+2] == "<=":
                 line, col = self.line, self.col
                 self.advance(); self.advance()
-                return Token(TokenType.EQ, "<=", line, col)
+                return Token(TokenType.LE, "<=", line, col)
 
             if self.text[self.pos:self.pos+2] == "&&":
                 line, col = self.line, self.col
                 self.advance(); self.advance()
-                return Token(TokenType.EQ, "&&", line, col)
+                return Token(TokenType.AND, "&&", line, col)
 
             if self.text[self.pos:self.pos+2] == "||":
                 line, col = self.line, self.col
                 self.advance(); self.advance()
-                return Token(TokenType.EQ, "||", line, col)
+                return Token(TokenType.OR, "||", line, col)
 
             # Toán tử 1 ký tự
             char = self.current_char()
@@ -210,7 +230,7 @@ class Lexer:
                 return Token(token_type, char, line, col)
 
             # nếu gặp ký tự lạ → lỗi
-            raise Exception(f"Invalid character: {char} at {self.line}:{self.col}")
+            raise LexicalError(f"Invalid character: {char}", self.line, self.col)
 
         # kết thúc file
         return Token(TokenType.EOF, None, self.line, self.col)

@@ -1,7 +1,27 @@
 from lexer import Lexer
 from parser import Parser
+from semantic import SemanticAnalyzer
+from codegen import CodeGenerator
+from enum import Enum
+from token import Token
 
 def print_ast(node, indent=0):
+    if isinstance(node, Token):
+        print("  " * indent + repr(node))
+        return
+
+    if isinstance(node, Enum):
+        print("  " * indent + node.name)
+        return
+
+    if isinstance(node, type):
+        print("  " * indent + node.__name__)
+        return
+
+    if not hasattr(node, "__dict__"):
+        print("  " * indent + repr(node))
+        return
+
     print("  " * indent + type(node).__name__)
 
     for attr, value in vars(node).items():
@@ -46,4 +66,15 @@ parser = Parser(lexer)
 
 ast = parser.parse()
 
+semantic = SemanticAnalyzer()
+semantic.analyze(ast)
+print("Semantic analysis passed")
+
+codegen = CodeGenerator("Main")
+code = codegen.generate(ast)
+print("\nGenerated JVM code:")
+print(code)
+
+print("\nAST:")
 print_ast(ast)
+

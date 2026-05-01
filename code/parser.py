@@ -1,5 +1,6 @@
 # parser.py
 
+from errors import ErrorCollection, ParseError
 from token import TokenType
 from ast import *
 
@@ -8,6 +9,7 @@ class Parser:
     def __init__(self, lexer):
         self.lexer = lexer
         self.current_token = self.lexer.get_next_token()
+        self.errors = []
 
     # =========================
     # UTIL
@@ -16,21 +18,40 @@ class Parser:
         if self.current_token.type == token_type:
             self.current_token = self.lexer.get_next_token()
         else:
-            raise Exception(f"Unexpected token {self.current_token}, expected {token_type}")
+            raise ParseError(
+                f"Unexpected token {self.current_token.type.name}, expected {token_type.name}",
+                self.current_token.line,
+                self.current_token.column,
+            )
+
+    def synchronize(self):
+        while self.current_token.type not in (
+            TokenType.SEMICOLON,
+            TokenType.RBRACE,
+            TokenType.EOF,
+        ):
+            self.current_token = self.lexer.get_next_token()
+
+        if self.current_token.type == TokenType.SEMICOLON:
+            self.eat(TokenType.SEMICOLON)
 
     # =========================
     # PROGRAM
     # =========================
     def parse(self):
+        start = self.current_token
         self.eat(TokenType.BEGIN)
         block = self.block()
         self.eat(TokenType.END)
-        return Program(block)
+        if self.errors:
+            raise ErrorCollection("Syntax analysis", self.errors)
+        return Program(block, start.line, start.column)
 
     # =========================
     # BLOCK
     # =========================
     def block(self):
+        start = self.current_token
         self.eat(TokenType.LBRACE)
 
         decls = []
@@ -41,23 +62,33 @@ class Parser:
             TokenType.INT, TokenType.BOOL, TokenType.FLOAT,
             TokenType.STRING, TokenType.AUTO
         ):
-            decls.append(self.declaration())
+            try:
+                decls.append(self.declaration())
+            except ParseError as error:
+                self.errors.append(error)
+                self.synchronize()
 
         # STMT LIST
         while self.current_token.type not in (TokenType.RBRACE, TokenType.EOF):
-            stmts.append(self.statement())
+            try:
+                stmts.append(self.statement())
+            except ParseError as error:
+                self.errors.append(error)
+                self.synchronize()
 
         self.eat(TokenType.RBRACE)
-        return Block(decls, stmts)
+        return Block(decls, stmts, start.line, start.column)
 
     # =========================
     # DECL
     # =========================
     def declaration(self):
+        start = self.current_token
         var_type = self.current_token.type.name.lower()
         self.eat(self.current_token.type)
 
-        name = self.current_token.value
+        name_token = self.current_token
+        name = name_token.value
         self.eat(TokenType.IDENTIFIER)
 
         expr = None
@@ -66,7 +97,7 @@ class Parser:
             expr = self.expr()
 
         self.eat(TokenType.SEMICOLON)
-        return VarDecl(var_type, name, expr)
+        return VarDecl(var_type, name, expr, name_token.line, name_token.column)
 
     # =========================
     # STATEMENT
@@ -96,25 +127,31 @@ class Parser:
             return self.block()
 
         else:
-            raise Exception(f"Invalid statement: {self.current_token}")
+            raise ParseError(
+                f"Invalid statement starting with {self.current_token.type.name}",
+                self.current_token.line,
+                self.current_token.column,
+            )
 
     # =========================
     # ASSIGN
     # =========================
     def assign_stmt(self):
-        name = self.current_token.value
+        name_token = self.current_token
+        name = name_token.value
         self.eat(TokenType.IDENTIFIER)
 
         self.eat(TokenType.ASSIGN)
         expr = self.expr()
 
         self.eat(TokenType.SEMICOLON)
-        return Assign(name, expr)
+        return Assign(name, expr, name_token.line, name_token.column)
 
     # =========================
     # PRINT
     # =========================
     def print_stmt(self):
+        start = self.current_token
         self.eat(TokenType.PRINT)
 
         self.eat(TokenType.LPAREN)
@@ -122,12 +159,13 @@ class Parser:
         self.eat(TokenType.RPAREN)
 
         self.eat(TokenType.SEMICOLON)
-        return Print(expr)
+        return Print(expr, start.line, start.column)
 
     # =========================
     # INPUT
     # =========================
     def input_stmt(self):
+        start = self.current_token
         self.eat(TokenType.INPUT)
 
         self.eat(TokenType.LPAREN)
@@ -136,12 +174,13 @@ class Parser:
         self.eat(TokenType.RPAREN)
 
         self.eat(TokenType.SEMICOLON)
-        return Input(name)
+        return Input(name, start.line, start.column)
 
     # =========================
     # IF
     # =========================
     def if_stmt(self):
+        start = self.current_token
         self.eat(TokenType.IF)
 
         self.eat(TokenType.LPAREN)
@@ -154,6 +193,7 @@ class Parser:
         # elseif list
         elif_branches = []
         while self.current_token.type == TokenType.ELSEIF:
+            elif_start = self.current_token
             self.eat(TokenType.ELSEIF)
 
             self.eat(TokenType.LPAREN)
@@ -161,7 +201,7 @@ class Parser:
             self.eat(TokenType.RPAREN)
 
             stmt = self.statement()
-            elif_branches.append(ElseIf(cond, stmt))
+            elif_branches.append(ElseIf(cond, stmt, elif_start.line, elif_start.column))
 
         # else
         else_branch = None
@@ -169,12 +209,13 @@ class Parser:
             self.eat(TokenType.ELSE)
             else_branch = self.statement()
 
-        return If(condition, then_branch, elif_branches, else_branch)
+        return If(condition, then_branch, elif_branches, else_branch, start.line, start.column)
 
     # =========================
     # FOR
     # =========================
     def for_stmt(self):
+        start_token = self.current_token
         self.eat(TokenType.FOR)
 
         self.eat(TokenType.LPAREN)
@@ -194,12 +235,13 @@ class Parser:
         self.eat(TokenType.RPAREN)
 
         body = self.statement()
-        return For(var, start, end, step, body)
+        return For(var, start, end, step, body, start_token.line, start_token.column)
 
     # =========================
     # WHILE (do-while)
     # =========================
     def while_stmt(self):
+        start = self.current_token
         self.eat(TokenType.DO)
 
         body = self.statement()
@@ -212,7 +254,7 @@ class Parser:
         self.eat(TokenType.RPAREN)
         self.eat(TokenType.SEMICOLON)
 
-        return While(body, condition)
+        return While(body, condition, start.line, start.column)
 
     # =========================
     # EXPRESSIONS
@@ -286,23 +328,23 @@ class Parser:
 
         if token.type == TokenType.INT_LITERAL:
             self.eat(TokenType.INT_LITERAL)
-            return Num(token.value)
+            return Num(token.value, token.line, token.column)
 
         if token.type == TokenType.FLOAT_LITERAL:
             self.eat(TokenType.FLOAT_LITERAL)
-            return Num(token.value)
+            return Num(token.value, token.line, token.column)
 
         if token.type == TokenType.STRING_LITERAL:
             self.eat(TokenType.STRING_LITERAL)
-            return String(token.value)
+            return String(token.value, token.line, token.column)
 
         if token.type in (TokenType.TRUE, TokenType.FALSE):
             self.eat(token.type)
-            return Bool(token.type == TokenType.TRUE)
+            return Bool(token.type == TokenType.TRUE, token.line, token.column)
 
         if token.type == TokenType.IDENTIFIER:
             self.eat(TokenType.IDENTIFIER)
-            return Var(token.value)
+            return Var(token.value, token.line, token.column)
 
         if token.type == TokenType.LPAREN:
             self.eat(TokenType.LPAREN)
@@ -310,4 +352,8 @@ class Parser:
             self.eat(TokenType.RPAREN)
             return node
 
-        raise Exception(f"Invalid expression: {token}")
+        raise ParseError(
+            f"Invalid expression starting with {token.type.name}",
+            token.line,
+            token.column,
+        )
