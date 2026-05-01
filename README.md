@@ -28,7 +28,7 @@ python --version
 java -version
 ```
 
-Project hiện **không cần `jasmin.jar`** và **không cần `javac`**. File `.class` được tạo trực tiếp bởi [code/classfile.py](code/classfile.py).
+File `.class` được tạo trực tiếp bởi [code/classfile.py](code/classfile.py).
 
 ## Cấu Trúc Project
 
