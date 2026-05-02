@@ -1,10 +1,414 @@
 ---
 title: "GMLang"
-subtitle: "Ngôn ngữ lập trình GMLang"
+subtitle: "Đặc tả ngôn ngữ lập trình và trình biên dịch chạy trên JVM"
+author:
+  - "Hồ Thu Giang - 25025060"
+  - "Nguyễn Thị Ngọc Minh - 25025080"
 format:
   beamer:
     theme: Madrid
     fontsize: 11pt
+    pdf-engine: xelatex
+    header-includes:
+      - \usepackage[vietnamese]{babel}
 ---
 
-# 
+# Giới thiệu
+
+**GMLang** là một ngôn ngữ lập trình được phát triển, cải tiến thêm từ ngôn ngữ UPL.
+
+Mục tiêu của project:
+
+- Thiết kế một ngôn ngữ có cú pháp đơn giản, dễ đọc và dễ phân tích.
+- Định nghĩa rõ đặc tả từ vựng, cú pháp và ngữ nghĩa.
+- Xây dựng compiler có thể xử lý chương trình GMLang.
+- Biên dịch chương trình thành file `.class`.
+- Thực thi trực tiếp trên Java Virtual Machine.
+
+```text
+GMLang source -> Compiler -> JVM bytecode -> Run on JVM
+```
+
+# Tổng quan GMLang
+
+## Các thành phần
+GMLang là ngôn ngữ lập trình mệnh lệnh, hỗ trợ các thành phần cơ bản:
+
+| Nhóm | Hỗ trợ |
+|---|---|
+| Kiểu dữ liệu | `int`, `float`, `bool`, `string`, `auto` |
+| Biến | khai báo, khởi tạo, gán giá trị |
+| Biểu thức | số học, so sánh, logic |
+| Điều khiển | `if`, `elseif`, `else`, `for`, `do while` |
+| Nhập/xuất | `input(...)`, `print(...)` |
+| Phạm vi | block `{ ... }`, symbol table |
+| Thực thi | sinh `.class` và chạy trên JVM |
+
+- Identifier: [a-zA-Z]+[0-9]*
+- Comment: // ... và /* ... */
+- Separators: ; ( ) { }
+
+# Cấu trúc chương trình
+
+\small
+Một chương trình GMLang bắt đầu bằng `begin`, kết thúc bằng `end`.
+
+```gmlang
+begin
+{
+    // khai báo biến
+    // câu lệnh
+}
+end
+```
+
+Ví dụ:
+
+```gmlang
+begin
+{
+    int x = 10;
+    print(x);
+}
+end
+```
+
+Block `{ ... }` được dùng để nhóm các khai báo và câu lệnh, đồng thời xác định phạm vi của biến.
+
+# Cú pháp
+
+## Khai báo biến
+
+```gmlang
+int x;
+float y = 3.14;
+bool ok = true;
+string name = "GMLang";
+auto z = 10;
+```
+Với `auto`, kiểu dữ liệu được suy luận từ giá trị khởi tạo.
+
+## Gán giá trị
+
+```gmlang
+x = 5;
+z = x + 2;
+```
+
+# Cú pháp
+
+## Nhập và xuất
+
+```gmlang
+input(x);
+print(x);
+print(x + 1);
+```
+
+
+# Cú pháp
+
+## Toán tử
+
+| Nhóm | Toán tử |
+|---|---|
+| Số học | `+`, `-`, `*`, `/` |
+| So sánh | `>`, `>=`, `<`, `<=`, `==` |
+| Logic | `&&`, `||`, `!` |
+
+Một số luật kiểu:
+
+- Toán tử số học áp dụng cho `int` và `float`
+- Toán tử logic chỉ áp dụng cho `bool`
+- Toán tử so sánh >, >=, <, <= chỉ áp dụng cho `int` và `float`
+- Toán tử == áp dụng cho int, float, bool và string
+- `string == string` so sánh theo nội dung chuỗi
+
+# Cú pháp
+
+## Độ ưu tiên toán tử
+| Mức | Toán tử   |   |   |
+| --- | --------- | - | - |
+| 1   | !         |   |   |
+| 2   | *, /      |   |   |
+| 3   | +, -      |   |   |
+| 4   | >, >=, ==, <=, < |   |   |
+| 5   | &&        |   |   |
+| 6   | $||$        |   |   |
+
+- Dấu ngoặc () được sử dụng để thay đổi thứ tự ưu tiên của các phép toán.
+- Biểu thức nằm trong dấu ngoặc sẽ được tính trước, bất kể thứ tự ưu tiên mặc định của toán tử.
+
+# Cú pháp
+
+## Điều kiện
+
+GMLang hỗ trợ `if`, `elseif`, `else`
+
+```gmlang
+if (x > 5) then {
+    print(x);
+} elseif (x == 5) {
+    print(5);
+} else {
+    print(0);
+}
+```
+
+Có 3 dạng:
+- if then
+- if then else
+- if then elseif ... else
+
+# Cú pháp
+
+## Điều kiện
+Ý nghĩa:
+
+- Nhánh `if` được kiểm tra đầu tiên
+- else là tùy chọn
+- elseif có thể xuất hiện nhiều lần
+- elseif được hiểu tương đương các if lồng nhau trong AST
+
+Luật ngữ nghĩa:
+
+- Điều kiện trong `if` và `elseif` phải có kiểu `bool`
+- Mỗi nhánh là một câu lệnh hoặc một block hợp lệ
+
+# Cú pháp: Vòng lặp
+\small
+GMLang hỗ trợ `do while` và `for`.
+
+## **Do while**
+
+```gmlang
+do {
+    x = x + 1;
+} while (x < 10);
+```
+
+## **For**
+
+```gmlang
+for (x = 0 to 5 step 1) {
+    print(x);
+}
+```
+
+Vòng `for` có dạng:
+
+```gmlang
+for (x = <start> to <end> step <stepValue>) {
+    statement
+}
+```
+
+# Cú pháp
+
+## Vòng for
+Trong vòng `for`, `x`, `start`, `end` và `stepValue` phải có kiểu `int`
+
+Cách thực thi:
+
+- Gán `start` cho biến điều khiển `x`
+- Nếu `stepValue > 0`, vòng lặp tiếp tục khi `x <= end`
+- Nếu `stepValue < 0`, vòng lặp tiếp tục khi `x >= end`
+- Sau mỗi vòng, cập nhật `x = x + stepValue`
+- `stepValue = 0` là lỗi ngữ nghĩa
+
+Ví dụ:
+
+```gmlang
+for (x = 3 to 0 step -1) {
+    print(x);
+}
+```
+
+Output: `3 2 1 0`
+
+# Kiến trúc compiler
+
+Pipeline Compiler của GMLang
+
+```text
+Source code (.gm)
+    |
+Lexical Analysis (Lexer)
+    |
+Syntax Analysis (Parser -> AST)
+    |
+Semantic Analysis
+    |
+Code Generator
+    |
+Class File Writer
+    |
+Main.class -> JVM
+```
+
+# Lexer và Parser
+
+## **Lexer**
+
+- Đọc source code theo từng ký tự.
+- Nhận diện từ khóa, định danh, literal, toán tử, dấu phân tách.
+- Loại bỏ khoảng trắng và comment.
+- Tạo danh sách token cho parser.
+
+Ví dụ:
+
+```gmlang
+int x = 10;
+```
+
+```text
+INT, IDENTIFIER(x), ASSIGN, INT_LITERAL(10), SEMICOLON
+```
+
+## **Parser**
+
+- Nhận danh sách token.
+- Kiểm tra chương trình có đúng grammar không.
+- Tạo AST để biểu diễn cấu trúc chương trình.
+
+# Semantic Analyzer 
+
+Semantic Analyzer kiểm tra các lỗi mà parser chưa thể xác định chỉ bằng cú pháp.
+
+Các kiểm tra chính:
+
+- Biến đã được khai báo trước khi sử dụng chưa
+- Có khai báo trùng tên trong cùng scope không
+- Kiểu dữ liệu khi gán có tương thích không
+- `auto` có thể suy luận kiểu được không
+- Điều kiện của `if`, `elseif`, `while` có phải `bool` không
+- Tham số của vòng `for` có phải `int` không
+
+Ví dụ lỗi:
+
+```gmlang
+int x;
+x = true;
+```
+
+Lỗi vì không thể gán `bool` cho biến `int`
+
+# Symbol table và báo lỗi
+
+## Symbol table
+Symbol table lưu thông tin biến trong quá trình kiểm tra ngữ nghĩa.
+
+| Tên biến | Kiểu | Phạm vi | Index |
+|---|---|---|---|
+| x | int | global | 1 |
+| y | float | block | 2 |
+
+Vai trò:
+
+- Quản lý biến theo scope
+- Kiểm tra biến đã khai báo hay chưa
+- Phát hiện khai báo trùng
+- Hỗ trợ ánh xạ biến khi sinh bytecode
+
+# Symbol table và báo lỗi
+
+## Báo lỗi
+
+- Lỗi có dòng/cột
+- Parser có recovery cơ bản đến `;` hoặc `}`
+- Semantic analyzer có thể gom nhiều lỗi trong một lần compile
+
+# Code Generator
+\small
+## Code generator
+Sau khi chương trình hợp lệ, code generator sinh JVM instruction
+
+Ví dụ:
+
+```gmlang
+int x = 1 + 2;
+```
+
+Sinh instruction:
+
+```text
+iconst_1
+iconst_2
+iadd
+istore 1
+```
+
+## Compiler tạo
+
+- `Main.j`: JVM instruction dạng text, dùng để đọc/debug
+- `Main.class`: bytecode thật để chạy trên JVM
+
+Project sinh `.class` trực tiếp bằng Python, không cần assembler bên ngoài
+
+# Demo
+
+Ví dụ chương trình:
+
+```gmlang
+begin
+{
+    int x = 0;
+
+    for (x = 0 to 5 step 1) {
+        print(x);
+    }
+}
+end
+```
+
+Kết quả:
+
+```text
+0 1 2 3 4 5
+```
+
+# Kết quả đạt được
+
+Project đã đạt được các phần chính:
+
+- Có đặc tả từ vựng, cú pháp và ngữ nghĩa cho GMLang.
+- Có compiler xử lý được chương trình GMLang.
+- Có lexer, parser, AST và semantic analyzer.
+- Có symbol table, scope và type inference.
+- Có sinh file `.class` chạy trực tiếp trên JVM.
+- Có báo lỗi kèm dòng/cột.
+- Có test suite để kiểm tra các chức năng quan trọng.
+
+Luồng tổng quát:
+
+```text
+.gm -> tokens -> AST -> semantic check -> bytecode -> .class
+```
+
+# Giới hạn và hướng phát triển
+
+## Giới hạn
+
+- `&&` và `||` chưa short-circuit
+- Chưa hỗ trợ function
+- Chưa hỗ trợ array hoặc object
+
+Hướng phát triển:
+
+- Bổ sung function và array
+- Cải thiện xử lý lỗi ở toàn bộ pipeline
+- Thêm short-circuit cho toán tử logic
+
+# Kết luận
+
+GMLang là một ngôn ngữ có đầy đủ các thành phần quan trọng để minh họa quá trình xây dựng compiler
+
+Project thể hiện được:
+
+- Thiết kế đặc tả ngôn ngữ
+- Phân tích từ vựng và cú pháp
+- Kiểm tra ngữ nghĩa
+- Sinh bytecode JVM
+- Chạy chương trình sau biên dịch
+
+Kết quả cuối cùng là một compiler có thể biên dịch chương trình GMLang thành `.class` và thực thi trực tiếp trên JVM

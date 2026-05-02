@@ -1,0 +1,21 @@
+begin
+{
+    int x;
+    bool flag = true;
+    auto missingInit;      // Loi: auto phai co gia tri khoi tao de suy luan kieu
+    int x = 5;             // Loi: khai bao trung bien x trong cung scope
+
+    x = true;              // Loi: x la int nhung lai gan gia tri bool
+    y = 10;                // Loi: y chua duoc khai bao
+
+    if (x) then {          // Loi: dieu kien if phai la bool, nhung x la int
+        print(x);
+    }
+
+    for (x = 0 to 10 step 0) {    // Loi: step = 0 co the gay vong lap vo han
+        print(x);
+    }
+
+    print(flag + 1);       // Loi: khong the cong bool voi int
+}
+end

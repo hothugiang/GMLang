@@ -319,6 +319,38 @@ báo lỗi:
 Cannot assign bool to int at 4:9
 ```
 
+## Demo Báo Lỗi Biên Dịch
+
+Repo có file [test_error.gm](test_error.gm) dùng để demo việc compiler báo nhiều lỗi trong một lần compile.
+
+Chạy:
+
+```powershell
+python code\compiler.py test_error.gm
+```
+
+File này cố ý chứa nhiều lỗi ngữ nghĩa:
+
+```gmlang
+auto missingInit;      // auto nhưng không có giá trị khởi tạo
+int x = 5;             // khai báo trùng biến x trong cùng scope
+x = true;              // x là int nhưng lại gán bool
+y = 10;                // y chưa được khai báo
+if (x) then { ... }    // điều kiện if phải là bool
+for (... step 0) { }   // step = 0 là lỗi ngữ nghĩa
+print(flag + 1);       // không thể cộng bool với int
+```
+
+Khi chạy, compiler sẽ dừng trước bước sinh bytecode và in danh sách lỗi ra terminal.
+
+Trong GMLang, khai báo biến phải đứng trước phần câu lệnh trong cùng block:
+
+```text
+Block ::= "{" DeclList StmtList "}"
+```
+
+Vì vậy, nếu đặt `int x = 5;` sau các câu lệnh như `if`, `for`, parser sẽ báo lỗi cú pháp trước và semantic analyzer chưa có cơ hội gom các lỗi ngữ nghĩa còn lại.
+
 ### 4. Code Generator
 
 [code/codegen.py](code/codegen.py) sinh JVM instruction dạng text.
