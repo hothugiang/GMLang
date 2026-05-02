@@ -563,17 +563,171 @@ Chương trình sau khi biên dịch sẽ được thực thi trực tiếp trê
 
 # 9. Xử lý lỗi (Error Handling)
 
-Trình biên dịch phát hiện và xử lý ba loại lỗi:
+Trong GMLang, xử lý lỗi là một phần quan trọng của quá trình biên dịch. Mục tiêu không chỉ là phát hiện chương trình sai, mà còn cung cấp thông tin đủ rõ để người lập trình biết lỗi nằm ở đâu và thuộc loại nào.
 
-- Lỗi từ vựng: ký tự không hợp lệ
-- Lỗi cú pháp: sai cấu trúc câu lệnh
-- Lỗi ngữ nghĩa: sai kiểu hoặc chưa khai báo
+Trình biên dịch phát hiện ba nhóm lỗi chính:
 
-Chiến lược xử lý lỗi:
+| Loại lỗi | Giai đoạn phát hiện | Ví dụ |
+|---|---|---|
+| Lỗi từ vựng | Lexer | ký tự không hợp lệ, token không thuộc ngôn ngữ |
+| Lỗi cú pháp | Parser | thiếu `;`, thiếu `}`, sai cấu trúc `if`, `for` |
+| Lỗi ngữ nghĩa | Semantic Analyzer | sai kiểu, biến chưa khai báo, khai báo trùng |
 
-- Với lỗi cú pháp, parser không dừng ngay khi gặp lỗi đầu tiên mà bỏ qua đến dấu `;` hoặc `}` để tiếp tục phân tích các câu lệnh tiếp theo.
-- Với lỗi ngữ nghĩa, semantic analyzer tiếp tục kiểm tra các khai báo/câu lệnh còn lại trong block để gom nhiều lỗi trong một lần biên dịch.
-- Các lỗi được báo kèm vị trí dòng/cột để người dùng dễ xác định nguyên nhân.
+## 9.1. Lỗi từ vựng
+
+Lỗi từ vựng xảy ra khi mã nguồn chứa ký tự hoặc chuỗi ký tự không thể tạo thành token hợp lệ của GMLang.
+
+Ví dụ:
+
+```java
+int x = 10 @;
+```
+
+Ký tự `@` không thuộc tập toán tử hoặc ký hiệu phân tách của GMLang, vì vậy lexer báo lỗi.
+
+Đặc điểm:
+
+- Lỗi được báo kèm vị trí dòng/cột.
+- Lexer thường dừng tại lỗi đầu tiên vì nếu token không hợp lệ thì parser không có đầu vào đáng tin cậy để tiếp tục.
+
+## 9.2. Lỗi cú pháp
+
+Lỗi cú pháp xảy ra khi chuỗi token không khớp với grammar của ngôn ngữ.
+
+Ví dụ:
+
+```java
+begin
+{
+  int x = ;
+  print(x)
+}
+end
+```
+
+Các lỗi trong ví dụ:
+
+- Thiếu biểu thức sau dấu `=`.
+- Thiếu dấu `;` sau lệnh `print(x)`.
+
+Chiến lược xử lý lỗi cú pháp:
+
+- Parser ghi nhận lỗi tại vị trí phát hiện.
+- Sau khi gặp lỗi, parser thực hiện recovery bằng cách bỏ qua token cho đến khi gặp một điểm đồng bộ.
+- Các điểm đồng bộ chính là `;` và `}`.
+- Sau đó parser tiếp tục phân tích phần còn lại của chương trình.
+
+Nhờ đó, parser có thể báo nhiều lỗi cú pháp trong một lần biên dịch thay vì chỉ dừng ở lỗi đầu tiên.
+
+Lưu ý: GMLang quy định trong một block, phần khai báo phải đứng trước phần câu lệnh:
+
+```bnf
+Block ::= "{" DeclList StmtList "}"
+```
+
+Vì vậy đoạn sau là lỗi cú pháp:
+
+```java
+begin
+{
+  int x;
+  x = 1;
+  int y;
+}
+end
+```
+
+Lý do là `int y;` xuất hiện sau một câu lệnh gán, trong khi grammar không cho phép quay lại phần khai báo sau khi đã bắt đầu phần câu lệnh.
+
+## 9.3. Lỗi ngữ nghĩa
+
+Lỗi ngữ nghĩa xảy ra khi chương trình đúng cú pháp nhưng vi phạm các luật về kiểu dữ liệu, khai báo hoặc phạm vi.
+
+Ví dụ:
+
+```java
+begin
+{
+  int x;
+  bool flag = true;
+
+  x = true;
+  y = 10;
+  if (x) then {
+    print(x);
+  }
+}
+end
+```
+
+Các lỗi ngữ nghĩa:
+
+- `x = true;`: không thể gán giá trị `bool` cho biến `int`.
+- `y = 10;`: biến `y` chưa được khai báo.
+- `if (x)`: điều kiện `if` phải có kiểu `bool`, nhưng `x` có kiểu `int`.
+
+Semantic analyzer kiểm tra các luật chính:
+
+- Biến phải được khai báo trước khi sử dụng.
+- Không được khai báo trùng tên trong cùng một scope.
+- Kiểu của biểu thức gán phải tương thích với kiểu của biến.
+- Biến `auto` phải có giá trị khởi tạo để suy luận kiểu.
+- Điều kiện trong `if`, `elseif`, `while` phải có kiểu `bool`.
+- Trong vòng `for`, biến điều khiển, `start`, `end`, `step` phải có kiểu `int`.
+- `step` của vòng `for` không được bằng `0`.
+
+Chiến lược xử lý lỗi ngữ nghĩa:
+
+- Semantic analyzer không dừng ngay tại lỗi đầu tiên.
+- Khi phát hiện lỗi trong một khai báo hoặc câu lệnh, lỗi được lưu lại.
+- Analyzer tiếp tục kiểm tra các khai báo/câu lệnh còn lại trong block nếu có thể.
+- Sau khi duyệt xong, toàn bộ danh sách lỗi được báo ra cùng lúc.
+
+## 9.4. Định dạng thông báo lỗi
+
+Mỗi lỗi cần cung cấp đủ thông tin để người dùng xác định nguyên nhân:
+
+```text
+<loại lỗi>: <mô tả lỗi> at <dòng>:<cột>
+```
+
+Ví dụ:
+
+```text
+Cannot assign bool to int at 7:5
+Undefined variable 'y' at 8:5
+Condition must be bool at 10:9
+```
+
+Khi có nhiều lỗi, trình biên dịch gom các lỗi thành một danh sách:
+
+```text
+error: Semantic analysis failed with 3 error(s):
+Cannot assign bool to int at 7:5
+Undefined variable 'y' at 8:5
+Condition must be bool at 10:9
+```
+
+## 9.5. Ảnh hưởng của lỗi đến quá trình biên dịch
+
+Quy trình biên dịch chỉ tiếp tục sang pha tiếp theo khi pha hiện tại thành công.
+
+```text
+Lexer
+  -> Parser
+  -> Semantic Analyzer
+  -> Code Generator
+  -> Class File Writer
+```
+
+Nếu một pha phát hiện lỗi nghiêm trọng:
+
+- Lexer lỗi: dừng trước parser.
+- Parser lỗi: dừng trước semantic analyzer.
+- Semantic lỗi: dừng trước code generation.
+- Code generation lỗi: không tạo file `.class` hợp lệ.
+
+Như vậy, file bytecode chỉ được sinh khi chương trình vượt qua đầy đủ các bước kiểm tra từ vựng, cú pháp và ngữ nghĩa.
 
 ---
 
