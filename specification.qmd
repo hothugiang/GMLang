@@ -254,6 +254,68 @@ for (x = 0 to 10 step 1) {
 }
 ```
 
+Vòng lặp `for` có dạng:
+
+```java
+for (x = start to end step stepValue) {
+  <statement>
+}
+```
+
+Trong đó `x`, `start`, `end` và `stepValue` đều phải có kiểu `int`.
+
+Cách thực thi:
+
+- Gán giá trị ban đầu `start` cho biến điều khiển `x`.
+- Nếu `stepValue > 0`, vòng lặp tiếp tục khi `x <= end`.
+- Nếu `stepValue < 0`, vòng lặp tiếp tục khi `x >= end`.
+- Sau mỗi lần lặp, biến điều khiển được cập nhật: `x = x + stepValue`.
+- `stepValue = 0` là lỗi ngữ nghĩa vì có thể gây vòng lặp vô hạn.
+
+Ví dụ vòng lặp tăng:
+
+```java
+for (x = 0 to 3 step 1) {
+  print(x);
+}
+```
+
+Kết quả:
+
+```text
+0
+1
+2
+3
+```
+
+Ví dụ vòng lặp giảm:
+
+```java
+for (x = 3 to 0 step -1) {
+  print(x);
+}
+```
+
+Kết quả:
+
+```text
+3
+2
+1
+0
+```
+
+Nếu hướng đi của `stepValue` không phù hợp với `start` và `end`, vòng lặp không thực hiện lần nào. Ví dụ:
+
+```java
+for (x = 0 to 10 step -1) {
+  print(x);
+}
+```
+
+Trong trường hợp này, `stepValue < 0` nên điều kiện lặp là `x >= end`. Ban đầu `0 >= 10` là sai, vì vậy vòng lặp kết thúc ngay.
+
 
 ## 4.5. Lệnh in
 
@@ -331,7 +393,7 @@ ElseIfList ::= "elseif" "(" Expr ")" Stmt ElseIfList | epsilon
 
 WhileStmt ::= "do" Stmt "while" "(" Expr ")" ";"
 
-ForStmt ::= "for" "(" Identifier "=" Expr "to" Expr "step" INT_LITERAL ")" Stmt
+ForStmt ::= "for" "(" Identifier "=" Expr "to" Expr "step" Expr ")" Stmt
 
 PrintStmt ::= "print" "(" Expr ")" ";"
 
@@ -432,7 +494,9 @@ Các quy tắc kiểm tra kiểu:
 - Phép +, -, *, / chỉ áp dụng cho kiểu int, float
 - Phép so sánh >, >=, <, <= chỉ áp dụng cho int, float
 - Phép == áp dụng cho cả int, bool, float, string
+- Với kiểu string, phép == so sánh nội dung chuỗi.
 - Các phép logic (&&, ||, !) chỉ áp dụng cho bool.
+- Trong vòng lặp for, biến điều khiển, start, end và step phải có kiểu int; step không được bằng 0.
 
 
 ## 7.5. Suy luận kiểu (Type Inference)
@@ -507,8 +571,9 @@ Trình biên dịch phát hiện và xử lý ba loại lỗi:
 
 Chiến lược xử lý lỗi:
 
-- Không dừng ngay khi gặp lỗi
-- Bỏ qua đến dấu ; hoặc } để tiếp tục phân tích
+- Với lỗi cú pháp, parser không dừng ngay khi gặp lỗi đầu tiên mà bỏ qua đến dấu `;` hoặc `}` để tiếp tục phân tích các câu lệnh tiếp theo.
+- Với lỗi ngữ nghĩa, semantic analyzer tiếp tục kiểm tra các khai báo/câu lệnh còn lại trong block để gom nhiều lỗi trong một lần biên dịch.
+- Các lỗi được báo kèm vị trí dòng/cột để người dùng dễ xác định nguyên nhân.
 
 ---
 

@@ -51,7 +51,7 @@ def main():
     output_dir = Path(args.out_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    source = source_path.read_text(encoding="utf-8")
+    source = source_path.read_text(encoding="utf-8-sig")
     jvm_assembly = compile_source(source, args.class_name)
 
     assembly_file = output_dir / f"{args.class_name}.j"

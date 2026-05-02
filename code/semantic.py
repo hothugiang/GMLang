@@ -16,7 +16,7 @@ from ast import (
     VarDecl,
     While,
 )
-from errors import SemanticError
+from errors import ErrorCollection, SemanticError
 
 
 class SemanticAnalyzer:
@@ -26,6 +26,7 @@ class SemanticAnalyzer:
         self.scope_counter = 0
         self.next_index = 1
         self.symbol_table = []
+        self.errors = []
 
     def analyze(self, node):
         self.scopes = []
@@ -33,7 +34,15 @@ class SemanticAnalyzer:
         self.scope_counter = 0
         self.next_index = 1
         self.symbol_table = []
-        self.visit(node)
+        self.errors = []
+
+        try:
+            self.visit(node)
+        except SemanticError as error:
+            self.errors.append(error)
+
+        if self.errors:
+            raise ErrorCollection("Semantic analysis", self.errors)
 
     def visit(self, node):
         method_name = "visit_" + type(node).__name__
@@ -97,19 +106,37 @@ class SemanticAnalyzer:
     def is_numeric(self, type_name):
         return type_name in ("int", "float")
 
+    def const_int_value(self, node):
+        if isinstance(node, Num) and isinstance(node.value, int):
+            return node.value
+
+        if isinstance(node, UnaryOp) and node.op.value == "-":
+            value = self.const_int_value(node.expr)
+            if value is not None:
+                return -value
+
+        return None
+
     def visit_Program(self, node: Program):
         self.visit(node.block)
 
     def visit_Block(self, node: Block):
         self.enter_scope()
 
-        for declaration in node.declarations:
-            self.visit(declaration)
+        try:
+            for declaration in node.declarations:
+                try:
+                    self.visit(declaration)
+                except SemanticError as error:
+                    self.errors.append(error)
 
-        for statement in node.statements:
-            self.visit(statement)
-
-        self.exit_scope()
+            for statement in node.statements:
+                try:
+                    self.visit(statement)
+                except SemanticError as error:
+                    self.errors.append(error)
+        finally:
+            self.exit_scope()
 
     def visit_VarDecl(self, node: VarDecl):
         if node.var_type == "auto":
@@ -168,6 +195,9 @@ class SemanticAnalyzer:
 
         if start_type != "int" or end_type != "int" or step_type != "int":
             self.error("for start, end and step expressions must be int", node)
+
+        if self.const_int_value(node.step) == 0:
+            self.error("for step must not be zero", node.step)
 
         self.visit(node.body)
 

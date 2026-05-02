@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+build/
+build_*/
+test_builds/
+.test_builds/

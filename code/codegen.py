@@ -290,16 +290,35 @@ class CodeGenerator:
     def visit_For(self, node: For):
         symbol = self.lookup(node.var)
         start_label = self.new_label("for_start")
+        positive_step_label = self.new_label("for_positive_step")
+        negative_step_label = self.new_label("for_negative_step")
+        body_label = self.new_label("for_body")
         end_label = self.new_label("for_end")
 
         self.visit(node.start)
         self.emit(self.store_instruction(symbol["type"], symbol["slot"]))
 
         self.emit(f"{start_label}:")
+        self.visit(node.step)
+        self.emit("iconst_0")
+        self.emit(f"if_icmpgt {positive_step_label}")
+        self.visit(node.step)
+        self.emit("iconst_0")
+        self.emit(f"if_icmplt {negative_step_label}")
+        self.emit(f"goto {end_label}")
+
+        self.emit(f"{positive_step_label}:")
         self.emit(self.load_instruction(symbol["type"], symbol["slot"]))
         self.visit(node.end)
         self.emit(f"if_icmpgt {end_label}")
+        self.emit(f"goto {body_label}")
 
+        self.emit(f"{negative_step_label}:")
+        self.emit(self.load_instruction(symbol["type"], symbol["slot"]))
+        self.visit(node.end)
+        self.emit(f"if_icmplt {end_label}")
+
+        self.emit(f"{body_label}:")
         self.visit(node.body)
 
         self.emit(self.load_instruction(symbol["type"], symbol["slot"]))
@@ -356,6 +375,12 @@ class CodeGenerator:
         raise CodeGenError(f"Unknown binary operator '{operator}'")
 
     def emit_comparison(self, node, left_type, right_type, operator):
+        if operator == "==" and left_type == "string" and right_type == "string":
+            self.visit(node.left)
+            self.visit(node.right)
+            self.emit("invokevirtual java/lang/String/equals(Ljava/lang/Object;)Z")
+            return
+
         true_label = self.new_label("cmp_true")
         end_label = self.new_label("cmp_end")
 
@@ -374,10 +399,6 @@ class CodeGenerator:
                 "<=": "ifle",
                 "==": "ifeq",
             }
-        elif result_type == "string":
-            if operator != "==":
-                raise CodeGenError("String comparison only supports '=='")
-            jumps = {"==": "if_acmpeq"}
         else:
             jumps = {
                 ">": "if_icmpgt",

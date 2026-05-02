@@ -394,7 +394,7 @@ Nhiệm vụ:
 JVM instruction text -> bytecode JVM -> file .class
 ```
 
-Project không gọi Jasmin hay `jasmin.jar`. File `.j` chỉ được ghi ra để đọc/debug, còn file `.class` được encode trực tiếp bằng Python trong `classfile.py`.
+File `.j` chỉ được ghi ra để đọc/debug, còn file `.class` được encode trực tiếp bằng Python trong `classfile.py`.
 
 File này làm các việc ở mức bytecode:
 
@@ -541,7 +541,7 @@ Các class lỗi:
 - `ParseError`: lỗi cú pháp.
 - `SemanticError`: lỗi ngữ nghĩa.
 - `CodeGenError`: lỗi sinh mã.
-- `ErrorCollection`: gom nhiều lỗi, chủ yếu dùng trong parser recovery.
+- `ErrorCollection`: gom nhiều lỗi cú pháp/ngữ nghĩa trong một lần compile.
 
 Ví dụ lỗi:
 
@@ -625,11 +625,9 @@ Project hiện đã có đủ các phần chính của compiler:
 - Code generator
 - Sinh `.class`
 - Chạy trên JVM
+- Gom nhiều lỗi cú pháp/ngữ nghĩa
 
 Một số giới hạn còn lại:
 
-- `String == String` chưa so sánh nội dung bằng `.equals`.
 - `&&` và `||` chưa short-circuit.
-- `for` phù hợp nhất với `step` dương.
-- Error recovery mới ở mức cơ bản.
-- Chưa có test suite riêng.
+- Lexer và codegen vẫn dừng ở lỗi đầu tiên.

@@ -396,14 +396,13 @@ Project đã khớp phần lớn specification:
 - Có JVM code generation
 - Có sinh `.class`
 - Có chạy trực tiếp trên JVM
+- Có test suite tự động bằng `unittest`
+- Có gom nhiều lỗi cú pháp/ngữ nghĩa trong một lần compile
 
 Một số giới hạn hiện tại:
 
-- `String == String` chưa so sánh nội dung bằng `.equals`.
 - `&&` và `||` chưa short-circuit.
-- `for` phù hợp nhất với `step` dương.
-- Error recovery mới ở mức cơ bản.
-- Chưa có test suite riêng.
+- Lexer và codegen vẫn dừng ở lỗi đầu tiên.
 
 ## Các Lệnh Hay Dùng
 
@@ -429,4 +428,10 @@ Chạy demo/debug:
 
 ```powershell
 python code\main.py
+```
+
+Chạy test suite:
+
+```powershell
+python -m unittest discover -s tests -v
 ```

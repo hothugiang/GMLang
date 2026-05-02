@@ -1,0 +1,10 @@
+---
+title: "GMLang"
+subtitle: "Ngôn ngữ lập trình GMLang"
+format:
+  beamer:
+    theme: Madrid
+    fontsize: 11pt
+---
+
+# 
