@@ -1,0 +1,26 @@
+begin
+{
+    int x;
+    bool flag = true;
+
+    // Semantic error 1: auto phai co initializer.
+    auto missingInit;
+
+    // Semantic error 2: khai bao trung bien trong cung scope.
+    int x = 5;
+
+    // Semantic error 3: gan bool cho bien int.
+    x = true;
+
+    // Semantic error 4: bien y chua duoc khai bao.
+    y = 10;
+
+    // Semantic error 5: dieu kien if phai la bool, nhung x la int.
+    if (x) then {
+        print(x);
+    }
+
+    // Semantic error 6: khong the cong bool voi int.
+    print(flag + 1);
+}
+end

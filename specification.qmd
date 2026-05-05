@@ -533,31 +533,510 @@ x = 5;      // chưa khai báo
 
 # 8. Sinh mã Bytecode
 
-Trình biên dịch GMLang sinh Bytecode. Mỗi câu lệnh trong GMLang được ánh xạ trực tiếp sang các lệnh tương ứng trong JVM.
+Sau khi chương trình vượt qua phân tích từ vựng, cú pháp và ngữ nghĩa, bộ sinh mã duyệt cây AST và sinh ra mã JVM assembly. Mã này được ghi ra file `.j`, sau đó assembler tối giản trong `classfile.py` chuyển thành file `.class` để chạy trên JVM.
 
-Một số lệnh cơ bản:
+JVM là máy ảo dạng stack-based. Điều này có nghĩa là các phép tính không thao tác trực tiếp trên biến, mà thường diễn ra qua operand stack:
 
-- Nạp hằng số:
-  iconst_0, iconst_1, ldc
+```text
+đẩy giá trị lên stack
+đẩy giá trị tiếp theo lên stack
+thực hiện lệnh tính toán
+lưu kết quả về local variable slot nếu cần
+```
 
-- Truy cập biến:
-  iload, istore
+Ví dụ:
 
-- Toán học:
-  iadd, isub, imul, idiv
+```java
+int x = 1 + 2;
+```
 
-- So sánh:
-  if_icmpgt, if_icmpge, if_icmplt, if_icmple, if_icmpeq
+có thể được sinh thành:
 
-- Điều khiển luồng:
-  goto, ifeq
+```jvm
+iconst_1
+iconst_2
+iadd
+istore 1
+```
 
-- In:
-  getstatic java/lang/System/out Ljava/io/PrintStream;
+Ý nghĩa:
 
-  invokevirtual java/io/PrintStream/println(I)V
+- `iconst_1`: đẩy số nguyên 1 lên operand stack.
+- `iconst_2`: đẩy số nguyên 2 lên operand stack.
+- `iadd`: lấy hai số nguyên trên stack, cộng lại và đẩy kết quả lên stack.
+- `istore 1`: lấy kết quả trên stack và lưu vào local variable slot 1.
 
-Chương trình sau khi biên dịch sẽ được thực thi trực tiếp trên JVM
+## 8.1. Cấu trúc file JVM assembly
+
+File `.j` sinh ra có cấu trúc chính như sau:
+
+```jvm
+.class public Main
+.super java/lang/Object
+
+.method public static main([Ljava/lang/String;)V
+.limit stack 100
+.limit locals 100
+
+; các lệnh JVM được sinh từ chương trình GMLang
+
+return
+.end method
+```
+
+Trong đó:
+
+- `.class public Main`: khai báo class JVM tên `Main`.
+- `.super java/lang/Object`: class này kế thừa từ `java.lang.Object`.
+- `.method public static main([Ljava/lang/String;)V`: khai báo hàm `main` tương ứng với `public static void main(String[] args)`.
+- `.limit stack 100`: giới hạn kích thước operand stack.
+- `.limit locals 100`: giới hạn số local variable slot.
+
+## 8.2. Local variable slot
+
+Mỗi biến GMLang được ánh xạ sang một local variable slot của JVM. Chỉ số slot được quản lý bằng `index` trong symbol table và trong code generator.
+
+Ví dụ:
+
+| Biến | Kiểu | Slot |
+|---|---|---|
+| x | int | 1 |
+| flag | bool | 2 |
+| price | float | 3 |
+| name | string | 4 |
+
+Slot 0 thường dành cho tham số `String[] args` của hàm `main`, nên biến của GMLang bắt đầu từ slot 1.
+
+## 8.3. Lệnh nạp hằng
+
+Các hằng số và chuỗi được đẩy lên operand stack bằng các lệnh sau:
+
+| Lệnh | Ý nghĩa |
+|---|---|
+| `iconst_m1` | đẩy số nguyên -1 |
+| `iconst_0` đến `iconst_5` | đẩy các số nguyên nhỏ từ 0 đến 5 |
+| `bipush n` | đẩy số nguyên trong khoảng byte |
+| `sipush n` | đẩy số nguyên trong khoảng short |
+| `ldc value` | đẩy hằng từ constant pool, dùng cho số lớn, float hoặc string |
+
+Sự khác nhau giữa `iconst`, `bipush`, `sipush` và `ldc`:
+
+| Nhóm lệnh | Dùng khi nào | Ví dụ | Ghi chú |
+|---|---|---|---|
+| `iconst_m1`, `iconst_0` ... `iconst_5` | số nguyên rất nhỏ, từ -1 đến 5 | `iconst_3` | ngắn và nhanh nhất, không cần tham số dài |
+| `bipush n` | số nguyên vừa, trong khoảng -128 đến 127 | `bipush 10` | dùng khi số không nằm trong nhóm `iconst` |
+| `sipush n` | số nguyên lớn hơn, trong khoảng -32768 đến 32767 | `sipush 1000` | dùng cho số nguyên vượt quá `bipush` |
+| `ldc value` | hằng nằm trong constant pool | `ldc 100000`, `ldc 2.5`, `ldc "hello"` | dùng cho số lớn, float và string |
+
+Nói ngắn gọn, `iconst` là cách đẩy số nguyên nhỏ trực tiếp lên stack, còn `ldc` lấy hằng từ constant pool. Vì vậy `int x = 3;` thường dùng `iconst_3`, nhưng `float y = 2.5;` hoặc `string s = "abc";` phải dùng `ldc`.
+
+Ví dụ:
+
+```jvm
+iconst_3      ; int 3
+ldc 2.5       ; float 2.5
+ldc "GMLang"  ; string "GMLang"
+```
+
+Giá trị boolean được biểu diễn bằng số nguyên:
+
+```text
+false -> iconst_0
+true  -> iconst_1
+```
+
+## 8.4. Lệnh load và store biến
+
+Khi cần lấy giá trị biến, codegen dùng lệnh load. Khi cần gán hoặc khởi tạo biến, codegen dùng lệnh store.
+
+| Kiểu GMLang | Load | Store | Ghi chú |
+|---|---|---|---|
+| `int` | `iload slot` | `istore slot` | số nguyên |
+| `bool` | `iload slot` | `istore slot` | boolean lưu bằng 0/1 |
+| `float` | `fload slot` | `fstore slot` | số thực |
+| `string` | `aload slot` | `astore slot` | object reference |
+
+Sự khác nhau giữa load và store:
+
+| Lệnh | Chiều dữ liệu | Ý nghĩa |
+|---|---|---|
+| `iload 1` | local slot 1 -> operand stack | lấy giá trị `int` hoặc `bool` của biến ở slot 1 để đem đi tính toán/in ra |
+| `istore 1` | operand stack -> local slot 1 | lấy giá trị trên stack và lưu vào biến `int` hoặc `bool` ở slot 1 |
+| `fload 2` | local slot 2 -> operand stack | lấy giá trị `float` |
+| `fstore 2` | operand stack -> local slot 2 | lưu giá trị `float` |
+| `aload 3` | local slot 3 -> operand stack | lấy reference của object, ví dụ `string` hoặc `Scanner` |
+| `astore 3` | operand stack -> local slot 3 | lưu reference của object |
+
+Ví dụ nếu `x` có slot 1:
+
+```jvm
+bipush 10
+istore 1   ; x = 10
+
+iload 1    ; lấy x lên stack để dùng tiếp
+```
+
+`istore` thường xuất hiện ở khai báo biến hoặc câu lệnh gán. `iload` thường xuất hiện khi biến được dùng trong biểu thức hoặc trong `print`.
+
+Ví dụ:
+
+```java
+int x = 10;
+print(x);
+```
+
+có thể sinh:
+
+```jvm
+bipush 10
+istore 1
+
+getstatic java/lang/System/out Ljava/io/PrintStream;
+iload 1
+invokevirtual java/io/PrintStream/println(I)V
+```
+
+## 8.5. Lệnh toán học
+
+Các phép toán số học được sinh theo kiểu dữ liệu của biểu thức.
+
+| Toán tử GMLang | Int JVM | Float JVM |
+|---|---|---|
+| `+` | `iadd` | `fadd` |
+| `-` | `isub` | `fsub` |
+| `*` | `imul` | `fmul` |
+| `/` | `idiv` | `fdiv` |
+| unary `-` | `ineg` | `fneg` |
+
+Quy tắc đặt tên lệnh:
+
+| Tiền tố | Kiểu dữ liệu | Ví dụ |
+|---|---|---|
+| `i` | integer, dùng cho `int` và một số thao tác với `bool` | `iadd`, `isub`, `iload`, `istore` |
+| `f` | float | `fadd`, `fsub`, `fload`, `fstore` |
+| `a` | reference object | `aload`, `astore` |
+
+Các lệnh toán học lấy toán hạng từ stack và đẩy kết quả lại lên stack. Ví dụ:
+
+```jvm
+iload 1
+iload 2
+iadd
+```
+
+Nếu slot 1 là `x`, slot 2 là `y`, đoạn trên tương ứng với biểu thức:
+
+```java
+x + y
+```
+
+Nếu một biểu thức có cả `int` và `float`, codegen sinh thêm lệnh chuyển kiểu:
+
+```jvm
+i2f
+```
+
+Ví dụ:
+
+```java
+float y = 1 + 2.5;
+```
+
+có thể sinh theo ý tưởng:
+
+```jvm
+iconst_1
+i2f
+ldc 2.5
+fadd
+fstore 1
+```
+
+## 8.6. Lệnh so sánh và logic
+
+Các phép so sánh trả về giá trị boolean, tức là `0` hoặc `1`.
+
+Với kiểu `int`, codegen dùng các lệnh nhảy so sánh:
+
+| Toán tử | Lệnh JVM |
+|---|---|
+| `>` | `if_icmpgt` |
+| `>=` | `if_icmpge` |
+| `<` | `if_icmplt` |
+| `<=` | `if_icmple` |
+| `==` | `if_icmpeq` |
+
+Các lệnh `if_icmp...` luôn lấy hai số nguyên trên stack ra để so sánh. Nếu điều kiện đúng thì nhảy tới label.
+
+Ví dụ:
+
+```jvm
+iload 1
+iconst_5
+if_icmpgt cmp_true_0
+```
+
+Đọc là:
+
+```text
+lấy x từ slot 1
+đẩy số 5
+nếu x > 5 thì nhảy tới cmp_true_0
+```
+
+Sự khác nhau giữa các lệnh nhảy thường gặp:
+
+| Lệnh | Điều kiện nhảy | Dùng trong project |
+|---|---|---|
+| `if_icmpgt label` | nhảy nếu giá trị thứ nhất > giá trị thứ hai | so sánh `int` |
+| `if_icmpge label` | nhảy nếu giá trị thứ nhất >= giá trị thứ hai | so sánh `int` |
+| `if_icmplt label` | nhảy nếu giá trị thứ nhất < giá trị thứ hai | so sánh `int` |
+| `if_icmple label` | nhảy nếu giá trị thứ nhất <= giá trị thứ hai | so sánh `int` |
+| `if_icmpeq label` | nhảy nếu hai giá trị bằng nhau | so sánh `int`, `bool` |
+| `ifeq label` | nhảy nếu một giá trị trên stack bằng 0 | kiểm tra điều kiện sai trong `if` |
+| `ifne label` | nhảy nếu một giá trị trên stack khác 0 | lặp lại trong `do-while` |
+| `goto label` | nhảy vô điều kiện | bỏ qua nhánh else hoặc quay lại đầu vòng lặp |
+
+Ví dụ:
+
+```java
+print(x > 5);
+```
+
+có thể sinh theo dạng:
+
+```jvm
+iload 1
+iconst_5
+if_icmpgt cmp_true_0
+iconst_0
+goto cmp_end_1
+cmp_true_0:
+iconst_1
+cmp_end_1:
+```
+
+Với kiểu `float`, JVM không dùng trực tiếp `if_fcmp...`. Codegen sinh:
+
+```jvm
+fcmpl
+ifgt / ifge / iflt / ifle / ifeq
+```
+
+Với kiểu `string`, phép `==` được sinh thành lời gọi phương thức:
+
+```jvm
+invokevirtual java/lang/String/equals(Ljava/lang/Object;)Z
+```
+
+Các phép logic được sinh như sau:
+
+| Toán tử | Lệnh JVM |
+|---|---|
+| `&&` | `iand` |
+| `||` | `ior` |
+| `!` | dùng `ifeq`, `goto` và label để đảo 0/1 |
+
+Vì boolean được biểu diễn bằng `0` và `1`, phép `&&` có thể dùng `iand`, còn `||` có thể dùng `ior`.
+
+## 8.7. Lệnh print
+
+Lệnh:
+
+```java
+print(expr);
+```
+
+được sinh theo mẫu:
+
+```jvm
+getstatic java/lang/System/out Ljava/io/PrintStream;
+<sinh mã cho expr>
+invokevirtual java/io/PrintStream/println(<descriptor>)V
+```
+
+Descriptor phụ thuộc vào kiểu của biểu thức:
+
+| Kiểu | Descriptor |
+|---|---|
+| `int` | `(I)V` |
+| `bool` | `(Z)V` |
+| `float` | `(F)V` |
+| `string` | `(Ljava/lang/String;)V` |
+
+Hai lệnh chính trong `print` có vai trò khác nhau:
+
+| Lệnh | Vai trò |
+|---|---|
+| `getstatic java/lang/System/out Ljava/io/PrintStream;` | lấy object `System.out` và đẩy lên stack |
+| `invokevirtual java/io/PrintStream/println(...)V` | gọi phương thức `println` trên object `System.out` |
+
+Trước khi gọi `println`, stack phải có đủ:
+
+```text
+System.out
+giá trị cần in
+```
+
+Ví dụ:
+
+```java
+print("hello");
+```
+
+sinh:
+
+```jvm
+getstatic java/lang/System/out Ljava/io/PrintStream;
+ldc "hello"
+invokevirtual java/io/PrintStream/println(Ljava/lang/String;)V
+```
+
+## 8.8. Lệnh input
+
+Lệnh:
+
+```java
+input(x);
+```
+
+được sinh bằng cách tạo `java.util.Scanner` đọc từ `System.in`.
+
+Phần tạo scanner:
+
+```jvm
+new java/util/Scanner
+dup
+getstatic java/lang/System/in Ljava/io/InputStream;
+invokespecial java/util/Scanner/<init>(Ljava/io/InputStream;)V
+astore <scanner_slot>
+```
+
+Ý nghĩa từng lệnh khi tạo `Scanner`:
+
+| Lệnh | Ý nghĩa |
+|---|---|
+| `new java/util/Scanner` | cấp phát object Scanner mới |
+| `dup` | nhân đôi reference trên stack để vừa gọi constructor vừa giữ object |
+| `getstatic java/lang/System/in Ljava/io/InputStream;` | lấy `System.in` làm nguồn nhập |
+| `invokespecial java/util/Scanner/<init>(Ljava/io/InputStream;)V` | gọi constructor `new Scanner(System.in)` |
+| `astore <scanner_slot>` | lưu object Scanner vào một local slot để dùng lại |
+
+Sau đó, tùy kiểu của biến, codegen gọi phương thức đọc tương ứng:
+
+| Kiểu biến | Scanner method |
+|---|---|
+| `int` | `nextInt()I` |
+| `bool` | `nextBoolean()Z` |
+| `float` | `nextFloat()F` |
+| `string` | `next()Ljava/lang/String;` |
+
+Ví dụ với `int x; input(x);`:
+
+```jvm
+aload <scanner_slot>
+invokevirtual java/util/Scanner/nextInt()I
+istore 1
+```
+
+## 8.9. Lệnh điều kiện if/elseif/else
+
+Câu lệnh:
+
+```java
+if (condition) then {
+  ...
+} else {
+  ...
+}
+```
+
+được sinh bằng label và lệnh nhảy:
+
+```jvm
+<sinh mã condition>
+ifeq if_next_0
+
+; then branch
+goto if_end_1
+
+if_next_0:
+; else branch
+
+if_end_1:
+```
+
+Trong đó:
+
+- `ifeq label`: nhảy nếu giá trị trên stack bằng 0, tức điều kiện sai.
+- `goto label`: nhảy vô điều kiện.
+- Các label như `if_next_0`, `if_end_1` đánh dấu vị trí trong mã JVM.
+
+## 8.10. Lệnh vòng lặp for
+
+Vòng lặp:
+
+```java
+for (i = start to end step stepValue) {
+  body
+}
+```
+
+được sinh theo ý tưởng:
+
+```jvm
+<sinh mã start>
+istore <slot_i>
+
+for_start:
+<kiểm tra step dương hay âm>
+
+<nếu step dương, kiểm tra i <= end>
+<nếu step âm, kiểm tra i >= end>
+
+for_body:
+<sinh mã body>
+
+iload <slot_i>
+<sinh mã step>
+iadd
+istore <slot_i>
+goto for_start
+
+for_end:
+```
+
+Project hỗ trợ cả vòng lặp tăng và giảm. Vì vậy codegen kiểm tra dấu của `step`:
+
+- Nếu `step > 0`, vòng lặp tiếp tục khi `i <= end`.
+- Nếu `step < 0`, vòng lặp tiếp tục khi `i >= end`.
+- Nếu `step == 0`, semantic analyzer đã báo lỗi trước khi đến codegen.
+
+## 8.11. Lệnh do-while
+
+Câu lệnh:
+
+```java
+do {
+  body
+} while (condition);
+```
+
+được sinh theo mẫu:
+
+```jvm
+do_start_0:
+<sinh mã body>
+<sinh mã condition>
+ifne do_start_0
+```
+
+Trong đó:
+
+- `ifne label`: nhảy nếu giá trị trên stack khác 0, tức điều kiện đúng.
+- Vì label nằm trước body, do-while luôn chạy body ít nhất một lần.
+
+Chương trình sau khi biên dịch sẽ được thực thi trực tiếp trên JVM.
 
 ---
 
