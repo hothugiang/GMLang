@@ -1,0 +1,6 @@
+begin
+{
+    // Lexer error: chu so chi duoc dung o cuoi identifier.
+    int ab1c;
+}
+end

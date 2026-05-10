@@ -1,0 +1,40 @@
+begin
+{
+    //demo khai báo biến
+    int x = 3;
+    int i;
+    float price = 2.5;
+    bool active = true;
+    string name = "GMLang";
+    auto total = x + 7;
+
+    print(name);
+    print(x);
+    print(price);
+    print(active);
+    print(total);
+
+    /*
+       Demo comment nhieu dong.
+       Lexer se bo qua toan bo phan nay.
+    */
+
+    // kiem tra dieu kien
+    if (total >= 10) then {
+        print("total >= 10");
+    } elseif (total == 5) {
+        print("total == 5");
+    } else {
+        print("small");
+    }
+
+    for (i = 0 to 3 step 1) {
+        print(i);
+    }
+
+    do {
+        print(x);
+        x = x - 1;
+    } while (x > 0);
+}
+end

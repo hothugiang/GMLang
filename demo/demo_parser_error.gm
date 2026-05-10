@@ -1,0 +1,15 @@
+begin
+{
+    // Parser error 1: thieu expression sau dau =
+    int x = ;
+
+    bool flag = true;
+
+    // Parser error 2: thieu ten bien sau kieu float
+    float = 1.0;
+
+    // Parser error 3: thieu dau ; sau print(flag)
+    print(flag)
+    print(x);
+}
+end
