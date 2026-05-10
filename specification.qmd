@@ -4,6 +4,10 @@ author: ""
 
 format:
   pdf:
+    toc: false               # Tự chèn mục lục sau trang bìa
+    toc-depth: 3             # Hiển thị đến cấp độ ###
+    toc-title: "MỤC LỤC"      # Tiêu đề mục lục tiếng Việt
+    number-sections: true    # Tự động đánh số 1., 1.1., 1.2...
     documentclass: article
     papersize: a4
     fontsize: 12pt
@@ -34,7 +38,7 @@ format:
 \textit{NGUYÊN LÝ NGÔN NGỮ LẬP TRÌNH}\\ [3cm]
 
 \begin{center}
-Giảng viên: TS. Võ Đình Hiếu\\ [1.5cm]
+Giảng viên: PGS. TS. Võ Đình Hiếu\\ [1.5cm]
 
 Nhóm: \\
 Hồ Thu Giang (25025060) \\
@@ -49,15 +53,29 @@ Nguyễn Thị Ngọc Minh (25025080) \\
 \end{titlepage}
 
 \newpage
+\renewcommand{\contentsname}{MỤC LỤC}
+\setcounter{tocdepth}{3}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  urlcolor=black,
+  citecolor=black
+}
+\tableofcontents
+\newpage
 
-# 1. Giới thiệu
+# Giới thiệu
 
 Ngôn ngữ GMLang được xây dựng dựa trên ngôn ngữ UPL trong đề bài, với mục tiêu mở rộng khả năng biểu đạt và hỗ trợ tốt hơn cho việc xây dựng trình biên dịch.
 
 GMLang vẫn giữ các đặc điểm cốt lõi của UPL như cú pháp đơn giản, số lượng kiểu dữ liệu hạn chế và các cấu trúc điều khiển cơ bản, nhưng được cải tiến thêm một số tính năng như:
 
-- Suy luận kiểu (type inference)
-- Biểu thức logic (&&, ||, !) 
+- Suy luận kiểu (type inference): GMLang cho phép sử dụng từ khóa auto để trình biên dịch tự động suy ra kiểu của biến dựa trên giá trị khởi tạo.
+- Thêm các kiểu dữ liệu: Trong khi UPL chỉ yêu cầu 2 kiểu là int và bool , GMLang đã bổ sung thêm kiểu float (số thập phân) và string (chuỗi ký tự), giúp mở rộng khả năng biểu đạt của ngôn ngữ.
+- Cải tién hệ tập toán tử và độ ưu tiên: GMLang bổ sung thêm các toán tử logic &&, ||, ! và toán tử so sánh >, >=, ==, <=, < và mở rộng độ ưu tiên để hỗ trợ biểu thức phức tạp hơn.
+- Cấu trúc if linh hoạt hơn: UPL chỉ yêu cầu if then và if then else. GMLang bổ sung thêm cấu trúc elseif, cho phép kiểm tra nhiều nhánh điều kiện một cách gọn gàng hơn thay vì phải lồng nhiều lệnh if.
+- Chi tiết hóa vòng lặp for: Yêu cầu của UPL về for khá chung chung. GMLang đã làm rõ cấu trúc for trong đó bao gồm cả cơ chế kiểm tra lỗi ngữ nghĩa liên quan đến biến điều khiển, start, end và step.
+- Lệnh nhập liệu: GMLang bổ sung thêm lệnh input để nhận dữ liệu từ người dùng , trong khi UPL chỉ đề cập đến lệnh print. 
 - Sinh Java Bytecode để thực thi trên máy ảo Java (JVM)
 
 Mục tiêu của bài là xây dựng một pipeline biên dịch đầy đủ từ mã nguồn GMLang đến bytecode, giúp minh họa rõ ràng cách hoạt động của một trình biên dịch.
@@ -65,7 +83,7 @@ Mục tiêu của bài là xây dựng một pipeline biên dịch đầy đủ 
 
 ---
 
-# 2. Mục tiêu
+# Mục tiêu
 Thiết kế ngôn ngữ GMLang với cú pháp và ngữ nghĩa rõ ràng
 
 Xây dựng các thành phần của trình biên dịch:
@@ -77,10 +95,10 @@ Xây dựng các thành phần của trình biên dịch:
 
 ---
 
-# 3. Đặc tả từ vựng (Lexical Specification)
+# Đặc tả từ vựng (Lexical Specification)
 Ngôn ngữ GMLang bao gồm các loại token chính như sau:
 
-## 3.1. Từ khóa (Keywords)
+## Từ khóa (Keywords)
 Các từ khóa được định nghĩa trước và không thể sử dụng làm tên biến, bao gồm:
 
 ```text
@@ -90,7 +108,7 @@ while, for, to, print, input
 ```
 
 
-## 3.2. Định danh (Identifier)
+## Định danh (Identifier)
 
 ```regex
 IDENTIFIER = [a-zA-Z]+[0-9]*
@@ -115,7 +133,7 @@ Ví dụ không hợp lệ:
 ```
 
 
-## 3.3. Hằng số (Literals)
+## Hằng số (Literals)
 Ngôn ngữ hỗ trợ hai loại hằng:
 
 - Số nguyên: 0, 1, 100,...
@@ -124,7 +142,7 @@ Ngôn ngữ hỗ trợ hai loại hằng:
 - Chuỗi: abc, xyz,...
 
 
-## 3.4. Toán tử (Operators)
+## Toán tử (Operators)
 
 GMLang hỗ trợ các toán tử:
 
@@ -134,7 +152,7 @@ GMLang hỗ trợ các toán tử:
 - Gán: =
 
 
-## 3.5. Ký hiệu phân tách (Separators)
+## Ký hiệu phân tách (Separators)
 
 Các ký hiệu phân tách gồm:
 ```text
@@ -142,7 +160,7 @@ Các ký hiệu phân tách gồm:
 ```
 
 
-## 3.6. Chú thích (Comments)
+## Chú thích (Comments)
 
 Ngôn ngữ hỗ trợ hai dạng chú thích:
 
@@ -154,7 +172,7 @@ Ngôn ngữ hỗ trợ hai dạng chú thích:
 
 ---
 
-# 4. Đặc tả cú pháp (Syntax Specification)
+# Đặc tả cú pháp (Syntax Specification)
 
 ## Cấu trúc tổng quát chương trình
 
@@ -167,7 +185,7 @@ end
 ```
 
 
-## 4.1. Khai báo biến
+## Khai báo biến
 Biến phải được khai báo trước khi sử dụng. GMLang hỗ trợ ba kiểu khai báo:
 
 - Khai báo thông thường:
@@ -189,7 +207,7 @@ auto z = 10;
 auto b = true;
 ```
 
-## 4.2. Câu lệnh gán
+## Câu lệnh gán
 
 Câu lệnh gán có dạng:
 
@@ -198,7 +216,7 @@ x = 10;
 y = x + 2;
 ```
 
-## 4.3. Câu lệnh điều kiện
+## Câu lệnh điều kiện
 
 GMLang hỗ trợ ba dạng câu lệnh điều kiện:
 
@@ -234,7 +252,7 @@ if (x > 5) then {
 
 GMLang hỗ trợ thêm cấu trúc elseif nhằm biểu diễn nhiều nhánh điều kiện một cách ngắn gọn. Về bản chất, elseif được chuyển đổi nội bộ thành các câu lệnh if lồng nhau trong quá trình sinh AST.
 
-## 4.4. Vòng lặp
+## Vòng lặp
 
 Ngôn ngữ hỗ trợ hai loại vòng lặp:
 
@@ -317,7 +335,7 @@ for (x = 0 to 10 step -1) {
 Trong trường hợp này, `stepValue < 0` nên điều kiện lặp là `x >= end`. Ban đầu `0 >= 10` là sai, vì vậy vòng lặp kết thúc ngay.
 
 
-## 4.5. Lệnh in
+## Lệnh in
 
 Lệnh in có dạng:
 
@@ -327,7 +345,7 @@ print(x + 1);
 ```
 
 
-## 4.6. Biểu thức
+## Biểu thức
 GMLang hỗ trợ các loại biểu thức:
 - Biểu thức số học: +, -, *, /
 - Biểu thức so sánh: >, >=, ==, <=
@@ -340,7 +358,7 @@ Ví dụ:
 ```
 
 
-## 4.7. Độ ưu tiên toán tử
+## Độ ưu tiên toán tử
 
 | Mức | Toán tử   |   |   |
 | --- | --------- | - | - |
@@ -358,7 +376,7 @@ Biểu thức nằm trong dấu ngoặc sẽ được tính trước, bất kể
 
 ---
 
-# 5. Văn phạm (Grammar – BNF)
+# Văn phạm (Grammar – BNF)
 
 ```bnf
 Program ::= "begin" Block "end"
@@ -411,7 +429,7 @@ Primary ::= Identifier | Literal | "(" Expr ")"
 
 ---
 
-# 6. Phân tích cú pháp (Parser & AST)
+# Phân tích cú pháp (Parser & AST)
 
 Sử dụng **Recursive Descent Parser**.
 
@@ -429,9 +447,9 @@ Assign
 
 ---
 
-# 7. Đặc tả ngữ nghĩa (Semantic Specification)
+# Đặc tả ngữ nghĩa (Semantic Specification)
 
-## 7.1. Bảng ký hiệu (Symbol Table)
+## Bảng ký hiệu (Symbol Table)
 
 Bảng ký hiệu (Symbol Table) được sử dụng trong quá trình phân tích ngữ nghĩa để lưu trữ thông tin về các biến đã được khai báo trong chương trình.
 
@@ -475,19 +493,19 @@ y → slot 2 → istore_2 / iload_2
 ```
 
 
-## 7.2. Phạm vi (Scope)
+## Phạm vi (Scope)
 
 * Phạm vi của biến được xác định bởi các khối `{ }`
 * Biến chỉ có hiệu lực trong phạm vi mà nó được khai báo và các phạm vi con
 
 
-## 7.3. Kiểm tra khai báo
+## Kiểm tra khai báo
 
 * Biến phải được khai báo trước khi sử dụng
 * Không được khai báo trùng tên trong cùng một phạm vi.
 
 
-## 7.4. Kiểm tra kiểu dữ liệu
+## Kiểm tra kiểu dữ liệu
 
 Các quy tắc kiểm tra kiểu:
 
@@ -499,7 +517,7 @@ Các quy tắc kiểm tra kiểu:
 - Trong vòng lặp for, biến điều khiển, start, end và step phải có kiểu int; step không được bằng 0.
 
 
-## 7.5. Suy luận kiểu (Type Inference)
+## Suy luận kiểu (Type Inference)
 
 Từ khóa auto cho phép trình biên dịch tự động suy ra kiểu của biến dựa trên giá trị khởi tạo.
 
@@ -512,7 +530,7 @@ auto c = "hello";    // string
 ```
 
 
-## 7.6. Lỗi ngữ nghĩa
+## Lỗi ngữ nghĩa
 
 Một số lỗi phổ biến:
 
@@ -531,7 +549,7 @@ x = 5;      // chưa khai báo
 
 ---
 
-# 8. Sinh mã Bytecode
+# Sinh mã Bytecode
 
 Trình biên dịch GMLang sinh Bytecode. Mỗi câu lệnh trong GMLang được ánh xạ trực tiếp sang các lệnh tương ứng trong JVM.
 
@@ -561,7 +579,7 @@ Chương trình sau khi biên dịch sẽ được thực thi trực tiếp trê
 
 ---
 
-# 9. Xử lý lỗi (Error Handling)
+# Xử lý lỗi (Error Handling)
 
 Trong GMLang, xử lý lỗi là một phần quan trọng của quá trình biên dịch. Mục tiêu không chỉ là phát hiện chương trình sai, mà còn cung cấp thông tin đủ rõ để người lập trình biết lỗi nằm ở đâu và thuộc loại nào.
 
@@ -573,7 +591,7 @@ Trình biên dịch phát hiện ba nhóm lỗi chính:
 | Lỗi cú pháp | Parser | thiếu `;`, thiếu `}`, sai cấu trúc `if`, `for` |
 | Lỗi ngữ nghĩa | Semantic Analyzer | sai kiểu, biến chưa khai báo, khai báo trùng |
 
-## 9.1. Lỗi từ vựng
+## Lỗi từ vựng
 
 Lỗi từ vựng xảy ra khi mã nguồn chứa ký tự hoặc chuỗi ký tự không thể tạo thành token hợp lệ của GMLang.
 
@@ -590,7 +608,7 @@ Ký tự `@` không thuộc tập toán tử hoặc ký hiệu phân tách của
 - Lỗi được báo kèm vị trí dòng/cột.
 - Lexer thường dừng tại lỗi đầu tiên vì nếu token không hợp lệ thì parser không có đầu vào đáng tin cậy để tiếp tục.
 
-## 9.2. Lỗi cú pháp
+## Lỗi cú pháp
 
 Lỗi cú pháp xảy ra khi chuỗi token không khớp với grammar của ngôn ngữ.
 
@@ -639,7 +657,7 @@ end
 
 Lý do là `int y;` xuất hiện sau một câu lệnh gán, trong khi grammar không cho phép quay lại phần khai báo sau khi đã bắt đầu phần câu lệnh.
 
-## 9.3. Lỗi ngữ nghĩa
+## Lỗi ngữ nghĩa
 
 Lỗi ngữ nghĩa xảy ra khi chương trình đúng cú pháp nhưng vi phạm các luật về kiểu dữ liệu, khai báo hoặc phạm vi.
 
@@ -683,7 +701,7 @@ Chiến lược xử lý lỗi ngữ nghĩa:
 - Analyzer tiếp tục kiểm tra các khai báo/câu lệnh còn lại trong block nếu có thể.
 - Sau khi duyệt xong, toàn bộ danh sách lỗi được báo ra cùng lúc.
 
-## 9.4. Định dạng thông báo lỗi
+## Định dạng thông báo lỗi
 
 Mỗi lỗi cần cung cấp đủ thông tin để người dùng xác định nguyên nhân:
 
@@ -708,7 +726,7 @@ Undefined variable 'y' at 8:5
 Condition must be bool at 10:9
 ```
 
-## 9.5. Ảnh hưởng của lỗi đến quá trình biên dịch
+## Ảnh hưởng của lỗi đến quá trình biên dịch
 
 Quy trình biên dịch chỉ tiếp tục sang pha tiếp theo khi pha hiện tại thành công.
 
@@ -731,7 +749,7 @@ Như vậy, file bytecode chỉ được sinh khi chương trình vượt qua đ
 
 ---
 
-# 10. Quy trình xây dựng trình biên dịch và điểm cải tiến
+# Quy trình xây dựng trình biên dịch và điểm cải tiến
 
 Ngôn ngữ GMLang không chỉ dừng lại ở việc định nghĩa cú pháp và ngữ nghĩa, mà còn được thiết kế để hỗ trợ một quy trình biên dịch hoàn chỉnh từ mã nguồn đến bytecode.
 
@@ -767,7 +785,7 @@ Bên cạnh việc xây dựng đầy đủ pipeline compiler, GMLang còn có m
 
 ---
 
-# 11. Ví dụ full pipeline
+# Ví dụ full pipeline
 
 ## Source
 
@@ -803,7 +821,7 @@ istore_1
 
 ---
 
-# 12. Kết luận
+# Kết luận
 
 GMLang là phiên bản cải tiến của UPL với cú pháp đơn giản nhưng mạnh hơn, hỗ trợ biểu thức logic, suy luận kiểu và có thiết kế trình biên dịch đầy đủ. Ngôn ngữ này không chỉ đáp ứng yêu cầu của đề bài mà còn thể hiện rõ cấu trúc của một hệ thống compiler hiện đại, dễ mở rộng và tối ưu trong tương lai.
 
