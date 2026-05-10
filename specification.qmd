@@ -415,13 +415,14 @@ ForStmt ::= "for" "(" Identifier "=" Expr "to" Expr "step" Expr ")" Stmt
 
 PrintStmt ::= "print" "(" Expr ")" ";"
 
-Expr ::= Expr "||" AndExpr | AndExpr
-AndExpr ::= AndExpr "&&" EqualityExpr | EqualityExpr
-EqualityExpr ::= EqualityExpr "==" RelExpr | RelExpr
-RelExpr ::= RelExpr (">" | ">=" | "<" | "<=") AddExpr | AddExpr
-AddExpr ::= AddExpr ("+" | "-") MulExpr | MulExpr
-MulExpr ::= MulExpr ("*" | "/") UnaryExpr | UnaryExpr
+Expr ::= AndExpr ("||" AndExpr)*
+AndExpr ::= EqualityExpr ("&&" EqualityExpr)*
+EqualityExpr ::= RelExpr ("==" RelExpr)*
+RelExpr ::= AddExpr ((">" | ">=" | "<" | "<=") AddExpr)*
+AddExpr ::= MulExpr (("+" | "-") MulExpr)*
+MulExpr ::= UnaryExpr (("*" | "/") UnaryExpr)*
 UnaryExpr ::= "!" UnaryExpr | "-" UnaryExpr | Primary
+
 
 Literal ::= INT_LITERAL | BOOL_LITERAL | FLOAT_LITERAL | STRING_LITERAL
 Primary ::= Identifier | Literal | "(" Expr ")"
@@ -431,20 +432,40 @@ Primary ::= Identifier | Literal | "(" Expr ")"
 
 # Phân tích cú pháp (Parser & AST)
 
-Sử dụng **Recursive Descent Parser**.
+GMLang sử dụng phương pháp **Recursive Descent Parser** (Phân tích cú pháp đệ quy xuống) để chuyển đổi chuỗi Token thành Cây cú pháp trừu tượng (AST). Đây là trình phân tích từ trên xuống (top-down), trong đó cấu trúc logic được xây dựng dựa trên sự phối hợp giữa class `Parser` và các định nghĩa Node trong `ast.py`.
 
-Ví dụ AST:
+## Cơ chế hoạt động của Recursive Descent Parser
+
+Trình phân tích hoạt động bằng cách thực thi các hàm đệ quy tương ứng với các quy tắc văn phạm (BNF). 
+
+* **Cơ chế Lookahead:** Parser luôn duy trì một biến `current_token` để "nhìn trước" mã nguồn, từ đó quyết định hàm nào sẽ được gọi tiếp theo.
+* **Hàm `eat()` và `primary()`:** Hàm `eat()` đóng vai trò kiểm chứng cú pháp, trong khi `primary()` là điểm dừng của đệ quy, nơi xử lý các đơn vị nhỏ nhất như hằng số (`Num`, `String`, `Bool`) hoặc biến (`Var`).
+* **Phân tầng ưu tiên toán tử:** Trong `parser.py`, các hàm được gọi theo thứ tự ưu tiên từ thấp đến cao. Điều này đảm bảo các toán tử có độ ưu tiên cao sẽ nằm sâu hơn trong cây AST và được tính toán trước.
+
+
+
+## Ánh xạ từ Code sang AST (Ví dụ: `y = x + 2`)
+
+Dựa trên cấu trúc mã nguồn bạn đã cung cấp, quá trình xây dựng AST cho câu lệnh gán diễn ra như sau:
+
+1.  **Khởi tạo (`assign_stmt`):** Parser nhận diện `y`, sau đó gọi hàm `expr()`.
+2.  **Phân cấp biểu thức:** `expr()` $\rightarrow$ `add_expr()`. Tại đây, Parser phát hiện dấu `+`.
+3.  **Xây dựng các Node con:** * Nhánh trái: Gọi `primary()` trả về đối tượng `Var(name='x')`.
+    * Nhánh phải: Gọi `primary()` trả về đối tượng `Num(value=2)`.
+4.  **Tạo Node trung gian:** Hàm `add()` sử dụng class `BinOp` trong `ast.py` để kết hợp: 
+    `BinOp(left=Var('x'), op=TokenType.PLUS/token '+', right=Num(2))`.
+5.  **Hoàn thiện Node gốc:** Hàm `assign_stmt()` trả về đối tượng `Assign(name='y', expr=BinOp(...))`.
+
+**Sơ đồ cấu trúc AST:**
 
 ```text
-y = x + 2
-
-Assign
-|-- id: y
-`-- Add
-    |-- x
-    `-- 2
+       Assign (Node)
+      /      \
+  name: "y"   expr: BinOp (Node)
+                    /    |    \
+             left: Var  op:+  right: Num
+                (x)             (2)
 ```
-
 ---
 
 # Đặc tả ngữ nghĩa (Semantic Specification)
@@ -462,9 +483,13 @@ Mỗi mục trong bảng ký hiệu bao gồm các thông tin sau:
 | y        | int  | block   | 2     |
 
 Trong đó:
+
 - Tên biến (Name): định danh của biến
+
 - Kiểu dữ liệu (Type): int, bool, string, float (hoặc suy luận từ auto)
+
 - Phạm vi (Scope): xác định theo khối { }
+
 - Chỉ số (Index): vị trí của biến trong local variable của JVM
 
 ### Cách hoạt động
@@ -584,7 +609,7 @@ istore 1
 - `iadd`: lấy hai số nguyên trên stack, cộng lại và đẩy kết quả lên stack.
 - `istore 1`: lấy kết quả trên stack và lưu vào local variable slot 1.
 
-## 8.1. Cấu trúc file JVM assembly
+## Cấu trúc file JVM assembly
 
 File `.j` sinh ra có cấu trúc chính như sau:
 
@@ -610,7 +635,7 @@ Trong đó:
 - `.limit stack 100`: giới hạn kích thước operand stack.
 - `.limit locals 100`: giới hạn số local variable slot.
 
-## 8.2. Local variable slot
+## Local variable slot
 
 Mỗi biến GMLang được ánh xạ sang một local variable slot của JVM. Chỉ số slot được quản lý bằng `index` trong symbol table và trong code generator.
 
@@ -625,7 +650,7 @@ Ví dụ:
 
 Slot 0 thường dành cho tham số `String[] args` của hàm `main`, nên biến của GMLang bắt đầu từ slot 1.
 
-## 8.3. Lệnh nạp hằng
+## Lệnh nạp hằng
 
 Các hằng số và chuỗi được đẩy lên operand stack bằng các lệnh sau:
 
@@ -663,7 +688,7 @@ false -> iconst_0
 true  -> iconst_1
 ```
 
-## 8.4. Lệnh load và store biến
+## Lệnh load và store biến
 
 Khi cần lấy giá trị biến, codegen dùng lệnh load. Khi cần gán hoặc khởi tạo biến, codegen dùng lệnh store.
 
@@ -714,7 +739,7 @@ iload 1
 invokevirtual java/io/PrintStream/println(I)V
 ```
 
-## 8.5. Lệnh toán học
+## Lệnh toán học
 
 Các phép toán số học được sinh theo kiểu dữ liệu của biểu thức.
 
@@ -770,7 +795,7 @@ fadd
 fstore 1
 ```
 
-## 8.6. Lệnh so sánh và logic
+## Lệnh so sánh và logic
 
 Các phép so sánh trả về giá trị boolean, tức là `0` hoặc `1`.
 
@@ -857,7 +882,7 @@ Các phép logic được sinh như sau:
 
 Vì boolean được biểu diễn bằng `0` và `1`, phép `&&` có thể dùng `iand`, còn `||` có thể dùng `ior`.
 
-## 8.7. Lệnh print
+## Lệnh print
 
 Lệnh:
 
@@ -910,7 +935,7 @@ ldc "hello"
 invokevirtual java/io/PrintStream/println(Ljava/lang/String;)V
 ```
 
-## 8.8. Lệnh input
+## Lệnh input
 
 Lệnh:
 
@@ -957,7 +982,7 @@ invokevirtual java/util/Scanner/nextInt()I
 istore 1
 ```
 
-## 8.9. Lệnh điều kiện if/elseif/else
+## Lệnh điều kiện if/elseif/else
 
 Câu lệnh:
 
@@ -990,7 +1015,7 @@ Trong đó:
 - `goto label`: nhảy vô điều kiện.
 - Các label như `if_next_0`, `if_end_1` đánh dấu vị trí trong mã JVM.
 
-## 8.10. Lệnh vòng lặp for
+## Lệnh vòng lặp for
 
 Vòng lặp:
 
@@ -1030,7 +1055,7 @@ Project hỗ trợ cả vòng lặp tăng và giảm. Vì vậy codegen kiểm t
 - Nếu `step < 0`, vòng lặp tiếp tục khi `i >= end`.
 - Nếu `step == 0`, semantic analyzer đã báo lỗi trước khi đến codegen.
 
-## 8.11. Lệnh do-while
+## Lệnh do-while
 
 Câu lệnh:
 
