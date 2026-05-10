@@ -20,6 +20,7 @@ class Lexer:
             return None
         return self.text[self.pos]
     
+    # xem ký tự tiếp theo mà không di chuyển
     def peek(self):
         if self.pos + 1 >= len(self.text):
             return None
